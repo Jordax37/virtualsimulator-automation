@@ -11,7 +11,8 @@
   "workspace": {
     "packageJson": {
       "dependencies": [
-        "npm:@netlify/database@^2.0.1"
+        "npm:@netlify/database@^2.0.1",
+        "npm:@netlify/identity@2"
       ]
     }
   }

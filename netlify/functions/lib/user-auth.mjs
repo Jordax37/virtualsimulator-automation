@@ -2,52 +2,89 @@
 // dessein de l'auth worker (voir worker-auth.mjs). Les agents locaux
 // n'utilisent JAMAIS ce module, et réciproquement.
 //
-// ⚠️ NON TESTÉ -- nécessite Netlify Identity activé en production. `netlify
-// dev` ne peut pas émuler la vérification d'un JWT Identity tant qu'Identity
-// n'est pas réellement activé sur le site lié. À vérifier dès l'activation :
-// forme exacte de `context.clientContext.user` pour les fonctions v2 (Request/
-// Context, export default), les claims utilisées ici (`sub`, `email`) sont
-// celles documentées par Netlify mais jamais observées en conditions réelles
-// sur CE projet.
+// Utilise l'API officielle actuelle @netlify/identity (getUser()) plutôt que
+// de lire manuellement context.clientContext.user -- cette dernière forme
+// n'était qu'une hypothèse jamais confirmée sur ce projet ; getUser() est la
+// méthode documentée et recommandée par Netlify, compatible avec les
+// fonctions v2 (export default) utilisées ici.
+//
+// RÈGLE DE SOURCE DE VÉRITÉ (imposée explicitement) :
+// Netlify Identity = authentification (qui est cette personne).
+// Notre table `users` = autorisation métier (ce qu'elle a le droit de faire).
+// Le rôle/l'agence utilisés pour autoriser une route viennent TOUJOURS de
+// `users.role` / `users.agency_id`, jamais de `identityUser.role` ni
+// `identityUser.roles` (app_metadata) -- même si Identity permet aussi de
+// stocker un rôle, on ne veut qu'une seule source de vérité métier pour
+// éviter un désaccord du type Identity=manager / DB=commercial.
+//
+// ⚠️ NON TESTÉ -- nécessite Netlify Identity activé en production. La forme
+// des champs de l'objet User (id, email, role, roles, appMetadata...) est
+// documentée par @netlify/identity mais jamais observée en conditions
+// réelles sur CE site tant qu'Identity n'est pas activé.
 
-// Netlify vérifie la signature du JWT Identity avant d'invoquer la fonction :
-// si `context.clientContext.user` est présent, l'authenticité est déjà
-// garantie par la plateforme -- ce module ne revérifie pas la signature,
-// il ne fait que lire le résultat.
-export function getIdentityClaims(context) {
-  return context?.clientContext?.user || null;
+import { getUser } from "@netlify/identity";
+
+// Résout l'utilisateur applicatif (role/agency_id) à partir de l'utilisateur
+// Identity authentifié. getUser() vérifie déjà l'authenticité (JWT) auprès
+// de la plateforme/API Identity -- ce module ne revérifie aucune signature,
+// il ne fait que lire un résultat déjà digne de confiance.
+//
+// Logique de liaison, dans cet ordre STRICT :
+// 1. identity_id déjà connu en base -> renvoie directement la ligne. Ce cas
+//    est TOUJOURS prioritaire et définitif : si une ligne a déjà un
+//    identity_id, on ne retombe JAMAIS sur une correspondance par email,
+//    même si l'email a changé depuis côté Identity (identity_id reste la
+//    seule référence d'identité une fois la liaison faite -- l'email
+//    pourra être resynchronisé séparément si besoin, mais ne sert plus à
+//    l'identification).
+// 2. Sinon (identity_id inconnu), cherche une ligne PRÉ-CRÉÉE par un
+//    administrateur pour cet email (identity_id encore NULL) et lie
+//    identity_id à cette occasion -- la toute première fois seulement.
+// 3. Aucune correspondance -> compte non provisionné, accès refusé. Ne crée
+//    JAMAIS de ligne automatiquement ici, quel que soit le contenu du JWT :
+//    le rôle et l'agence ne peuvent venir que d'une action d'administration
+//    préalable, jamais d'une auto-inscription.
+export async function getAuthenticatedUser(sql) {
+  // ⚠️ getUser() lui-même ne peut être invoqué que dans une vraie exécution
+  // Netlify Functions (lit un contexte de requête interne à la plateforme) --
+  // NON TESTABLE hors production avec Identity activé.
+  const identityUser = await getUser();
+  if (!identityUser || !identityUser.email) return null;
+  return resolveUserByIdentity(sql, identityUser.id, identityUser.email);
 }
 
-// Résout l'utilisateur applicatif (role/agency_id) à partir des claims
-// Identity déjà vérifiées. Le navigateur ne transmet et ne peut transmettre
-// aucun rôle/agence ici -- ces informations viennent EXCLUSIVEMENT de la
-// table `users`, elle-même alimentée par une action d'administration (jamais
-// par l'utilisateur lui-même, jamais par un auto-provisioning à la connexion).
-//
-// Logique de liaison à la première connexion :
-// 1. identity_id déjà connu en base -> renvoie directement la ligne.
-// 2. Sinon, cherche une ligne PRÉ-CRÉÉE par un administrateur pour cet email
-//    (identity_id encore NULL) et lie identity_id à cette occasion.
+// Logique de liaison seule, isolée de getUser() pour rester testable
+// indépendamment (voir le script de test : simule identityId/email sans
+// dépendre du runtime Identity réel). Ordre STRICT :
+// 1. identity_id déjà connu en base -> renvoie directement la ligne. Ce cas
+//    est TOUJOURS prioritaire et définitif : si une ligne a déjà un
+//    identity_id, on ne retombe JAMAIS sur une correspondance par email,
+//    même si l'email a changé depuis côté Identity (identity_id reste la
+//    seule référence d'identité une fois la liaison faite -- l'email
+//    pourra être resynchronisé séparément si besoin, mais ne sert plus à
+//    l'identification).
+// 2. Sinon (identity_id inconnu), cherche une ligne PRÉ-CRÉÉE par un
+//    administrateur pour cet email (identity_id encore NULL) et lie
+//    identity_id à cette occasion -- la toute première fois seulement.
 // 3. Aucune correspondance -> compte non provisionné, accès refusé. Ne crée
-//    JAMAIS de ligne automatiquement ici, quel que soit le contenu du JWT.
-export async function getAuthenticatedUser(sql, context) {
-  const claims = getIdentityClaims(context);
-  if (!claims || !claims.email || !claims.sub) return null;
-
+//    JAMAIS de ligne automatiquement ici : le rôle et l'agence ne peuvent
+//    venir que d'une action d'administration préalable, jamais d'une
+//    auto-inscription (voir aussi la future contrainte "Invite only").
+export async function resolveUserByIdentity(sql, identityId, email) {
   const byIdentity = await sql`
-    SELECT id, identity_id, email, role, agency_id FROM users WHERE identity_id = ${claims.sub}
+    SELECT id, identity_id, email, role, agency_id FROM users WHERE identity_id = ${identityId}
   `;
   if (byIdentity[0]) return toUser(byIdentity[0]);
 
   const pending = await sql`
     SELECT id, identity_id, email, role, agency_id
     FROM users
-    WHERE email = ${claims.email} AND identity_id IS NULL
+    WHERE email = ${email} AND identity_id IS NULL
   `;
   if (!pending[0]) return null; // compte non provisionné par un administrateur
 
   const linked = await sql`
-    UPDATE users SET identity_id = ${claims.sub}
+    UPDATE users SET identity_id = ${identityId}
     WHERE id = ${pending[0].id}
     RETURNING id, identity_id, email, role, agency_id
   `;

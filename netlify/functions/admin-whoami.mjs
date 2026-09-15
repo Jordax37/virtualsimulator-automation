@@ -4,16 +4,15 @@
 // rôle) à reproduire dans chacune, jamais une vérification côté client seule.
 //
 // ⚠️ PARTIELLEMENT TESTÉ : la résolution users/rôle (getAuthenticatedUser) est
-// testée directement (voir le script de test), mais PAS la lecture réelle de
-// context.clientContext.user par la plateforme Netlify -- nécessite Identity
-// activé en production.
+// testée directement (voir le script de test), mais PAS getUser() lui-même
+// en conditions réelles -- nécessite Identity activé en production.
 
 import { getDatabase } from "@netlify/database";
 import { getAuthenticatedUser, unauthenticatedResponse } from "./lib/user-auth.mjs";
 
-export default async (req, context) => {
+export default async (req) => {
   const { sql } = getDatabase();
-  const user = await getAuthenticatedUser(sql, context);
+  const user = await getAuthenticatedUser(sql);
   if (!user) return unauthenticatedResponse();
 
   return new Response(
