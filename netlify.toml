@@ -3,4 +3,12 @@
 
 [[edge_functions]]
   path = "/*"
+  excludedPath = ["/api/*", "/.netlify/functions/*"]
   function = "basic-auth"
+
+# URLs propres pour les fonctions (ex: /api/agent-whoami) plutôt que le
+# chemin brut /.netlify/functions/agent-whoami.
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200

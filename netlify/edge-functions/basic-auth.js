@@ -16,4 +16,10 @@ export default async (request, context) => {
   return context.next();
 };
 
-export const config = { path: "/*" };
+// Exclut les routes API : les agents locaux (extension Chrome) s'authentifient
+// par leur propre token (Bearer), jamais par ce mot de passe partagé destiné
+// aux humains -- sans cette exclusion, le token agent ne suffit jamais à
+// passer ce mur, avant même d'atteindre la fonction qui le vérifie
+// (vérifié en conditions réelles : "Authentification requise." renvoyé par
+// cet edge function AVANT que agent-whoami ne s'exécute).
+export const config = { path: "/*", excludedPath: ["/api/*", "/.netlify/functions/*"] };
