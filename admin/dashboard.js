@@ -994,6 +994,16 @@ async function loadBatches() {
     el.innerHTML = `<div class="empty">Erreur : ${escapeHtml(e.message)}</div>`;
   }
 }
+var TERMINAL_STATUSES = /* @__PURE__ */ new Set(["completed", "failed", "cancelled"]);
+async function cancelJob(jobId, onDone) {
+  if (!confirm("Annuler ce v\xE9hicule ? Un traitement d\xE9j\xE0 en cours sur un poste ne sera pas interrompu physiquement, mais le serveur ne le consid\xE9rera plus comme actif.")) return;
+  try {
+    await apiFetch(`/api/admin/jobs/${jobId}/cancel`, { method: "POST" });
+    onDone();
+  } catch (e) {
+    alert("Erreur : " + e.message);
+  }
+}
 async function openBatchDetail(batchId) {
   showPanel("batch-detail");
   const el = document.getElementById("batch-detail-jobs");
@@ -1004,7 +1014,7 @@ async function openBatchDetail(batchId) {
       el.innerHTML = '<div class="empty">Aucun v\xE9hicule dans ce batch.</div>';
       return;
     }
-    el.innerHTML = `<table><thead><tr><th>Statut</th><th>\xC9tape</th><th>URL source</th><th>Tentatives</th><th>Cr\xE9\xE9 le</th></tr></thead><tbody>
+    el.innerHTML = `<table><thead><tr><th>Statut</th><th>\xC9tape</th><th>URL source</th><th>Tentatives</th><th>Cr\xE9\xE9 le</th><th></th></tr></thead><tbody>
       ${vehicle_jobs.map(
       (j) => `<tr class="clickable" data-job-id="${escapeHtml(j.id)}">
             <td><span class="badge ${escapeHtml(j.status)}">${escapeHtml(j.status)}</span></td>
@@ -1012,11 +1022,18 @@ async function openBatchDetail(batchId) {
             <td style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(j.source_url)}</td>
             <td>${j.retry_count}</td>
             <td>${fmtDate(j.created_at)}</td>
+            <td>${TERMINAL_STATUSES.has(j.status) ? "" : `<button class="danger" data-cancel-job="${escapeHtml(j.id)}">Annuler</button>`}</td>
           </tr>`
     ).join("")}
     </tbody></table>`;
     el.querySelectorAll("tr.clickable").forEach((tr) => {
       tr.addEventListener("click", () => openJobDetail(tr.dataset.jobId));
+    });
+    el.querySelectorAll("[data-cancel-job]").forEach((btn) => {
+      btn.addEventListener("click", (evt) => {
+        evt.stopPropagation();
+        cancelJob(btn.dataset.cancelJob, () => openBatchDetail(batchId));
+      });
     });
   } catch (e) {
     el.innerHTML = `<div class="empty">Erreur : ${escapeHtml(e.message)}</div>`;
@@ -1036,6 +1053,10 @@ async function openJobDetail(jobId) {
       apiFetch(`/api/admin/jobs/${jobId}/events`)
     ]);
     statusEl2.innerHTML = `<span class="badge ${escapeHtml(vehicle_job.status)}">${escapeHtml(vehicle_job.status)}</span>`;
+    if (!TERMINAL_STATUSES.has(vehicle_job.status)) {
+      statusEl2.innerHTML += ` <button class="danger" id="btn-cancel-job-detail" style="margin-left:8px;">Annuler</button>`;
+      document.getElementById("btn-cancel-job-detail").addEventListener("click", () => cancelJob(jobId, () => openJobDetail(jobId)));
+    }
     urlEl.textContent = vehicle_job.source_url;
     if (events.length === 0) {
       listEl.innerHTML = '<div class="empty">Aucun \xE9v\xE9nement pour le moment.</div>';

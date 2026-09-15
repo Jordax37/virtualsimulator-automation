@@ -6,10 +6,10 @@
 // concurrentes sur le même job ne doivent jamais toutes les deux réussir.
 export const ALLOWED_TRANSITIONS = {
   queued: ["claimed", "cancelled"],
-  claimed: ["running", "queued"], // queued : le claim n'a pas été suivi d'un start à temps (bail expiré)
-  running: ["action_required", "retrying", "completed", "failed"],
-  action_required: ["running"], // resume, uniquement par le même worker
-  retrying: ["queued"],
+  claimed: ["running", "queued", "cancelled"], // queued : le claim n'a pas été suivi d'un start à temps (bail expiré)
+  running: ["action_required", "retrying", "completed", "failed", "cancelled"],
+  action_required: ["running", "cancelled"], // resume, uniquement par le même worker
+  retrying: ["queued", "cancelled"],
   completed: [], // terminal
   failed: [], // terminal
   cancelled: [], // terminal
