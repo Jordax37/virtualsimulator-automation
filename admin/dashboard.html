@@ -184,6 +184,22 @@
   }
   .back-link:hover { gap: 7px; }
   .job-detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; box-shadow: var(--shadow-sm); transition: border-color .2s ease; }
+  .stat-card:hover { border-color: var(--line-strong); }
+  .stat-card .stat-label { font-size: 10px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 8px; }
+  .stat-card .stat-value { font-size: 25px; font-weight: 700; color: var(--ink); letter-spacing: -0.3px; }
+  .stat-card .stat-value.accent { background: var(--accent-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .stat-card .stat-value.ok { color: var(--ok); }
+  .stat-card .stat-value.danger { color: var(--danger); }
+
+  .status-bar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; font-size: 12px; }
+  .status-bar-row:last-child { margin-bottom: 0; }
+  .status-bar-row .sb-label { width: 130px; flex-shrink: 0; color: var(--ink-soft); }
+  .status-bar-row .sb-track { flex: 1; height: 8px; background: rgba(255, 255, 255, 0.06); border-radius: 4px; overflow: hidden; }
+  .status-bar-row .sb-fill { height: 100%; border-radius: 4px; transition: width .5s ease; }
+  .status-bar-row .sb-count { width: 44px; text-align: right; color: var(--ink); font-weight: 600; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -213,6 +229,7 @@
       <button class="tab-btn active" data-panel="batches">Batches</button>
       <button class="tab-btn" data-panel="workers" id="tab-btn-workers" hidden>Workers</button>
       <button class="tab-btn" data-panel="users" id="tab-btn-users" hidden>Utilisateurs</button>
+      <button class="tab-btn" data-panel="analytics" id="tab-btn-analytics">Analytique</button>
     </nav>
 
     <!-- ===== BATCHES : liste ===== -->
@@ -325,6 +342,25 @@
       <div class="card">
         <h2>Collaborateurs existants</h2>
         <div id="users-list"><div class="empty">Chargement...</div></div>
+      </div>
+    </section>
+
+    <!-- ===== ANALYTIQUE ===== -->
+    <section class="panel" id="panel-analytics">
+      <div class="stats-grid" id="analytics-summary">
+        <div class="empty">Chargement...</div>
+      </div>
+      <div class="card">
+        <h2>Répartition par statut</h2>
+        <div id="analytics-status-bars"><div class="empty">Chargement...</div></div>
+      </div>
+      <div class="card" id="analytics-agencies-card" hidden>
+        <h2>Par agence</h2>
+        <div id="analytics-agencies"></div>
+      </div>
+      <div class="card" id="analytics-workers-card" hidden>
+        <h2>Activité des workers</h2>
+        <div id="analytics-workers"></div>
       </div>
     </section>
   </main>

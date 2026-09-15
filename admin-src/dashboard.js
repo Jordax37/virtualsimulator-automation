@@ -67,6 +67,7 @@ async function init() {
     loadWorkers();
     loadUsers();
   }
+  loadAnalytics();
 }
 
 async function loadUserInfo() {
@@ -398,6 +399,100 @@ async function loadUsers() {
     </tbody></table>`;
   } catch (e) {
     el.innerHTML = `<div class="empty">Erreur : ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ---------- Analytique ----------
+
+const STATUS_ORDER = ["queued", "claimed", "running", "action_required", "retrying", "completed", "failed", "cancelled"];
+const STATUS_LABELS = {
+  queued: "En attente",
+  claimed: "Réclamé",
+  running: "En cours",
+  action_required: "Action requise",
+  retrying: "Nouvelle tentative",
+  completed: "Terminé",
+  failed: "Échoué",
+  cancelled: "Annulé",
+};
+const STATUS_COLORS = {
+  queued: "#8fabff",
+  claimed: "#8fabff",
+  running: "#fbbf24",
+  action_required: "#fb923c",
+  retrying: "#f87171",
+  completed: "#34d399",
+  failed: "#f87171",
+  cancelled: "#726d8f",
+};
+
+async function loadAnalytics() {
+  const summaryEl = document.getElementById("analytics-summary");
+  const barsEl = document.getElementById("analytics-status-bars");
+  const agenciesCard = document.getElementById("analytics-agencies-card");
+  const workersCard = document.getElementById("analytics-workers-card");
+  try {
+    const data = await apiFetch("/api/admin/analytics");
+    const completed = data.by_status.completed || 0;
+    const failed = data.by_status.failed || 0;
+    const cancelled = data.by_status.cancelled || 0;
+    const terminal = completed + failed + cancelled;
+    const successRate = terminal > 0 ? Math.round((completed / terminal) * 100) : null;
+
+    summaryEl.innerHTML = `
+      <div class="stat-card"><div class="stat-label">Batches</div><div class="stat-value">${data.totals.batches}</div></div>
+      <div class="stat-card"><div class="stat-label">Véhicules</div><div class="stat-value accent">${data.totals.vehicle_jobs}</div></div>
+      <div class="stat-card"><div class="stat-label">Terminés</div><div class="stat-value ok">${completed}</div></div>
+      <div class="stat-card"><div class="stat-label">Échoués</div><div class="stat-value danger">${failed}</div></div>
+      <div class="stat-card"><div class="stat-label">Taux de réussite</div><div class="stat-value">${successRate === null ? "—" : successRate + "%"}</div></div>
+    `;
+
+    if (data.totals.vehicle_jobs === 0) {
+      barsEl.innerHTML = '<div class="empty">Aucun véhicule pour le moment.</div>';
+    } else {
+      const maxCount = Math.max(1, ...STATUS_ORDER.map((s) => data.by_status[s] || 0));
+      barsEl.innerHTML = STATUS_ORDER.map((s) => {
+        const count = data.by_status[s] || 0;
+        const pct = Math.round((count / maxCount) * 100);
+        return `<div class="status-bar-row">
+          <div class="sb-label">${STATUS_LABELS[s]}</div>
+          <div class="sb-track"><div class="sb-fill" style="width:${pct}%;background:${STATUS_COLORS[s]};"></div></div>
+          <div class="sb-count">${count}</div>
+        </div>`;
+      }).join("");
+    }
+
+    if (data.agencies.length > 0) {
+      agenciesCard.hidden = false;
+      document.getElementById("analytics-agencies").innerHTML = `<table><thead><tr><th>Agence</th><th>Batches</th><th>Véhicules</th><th>Terminés</th><th>Taux</th></tr></thead><tbody>
+        ${data.agencies
+          .map((a) => {
+            const rate = a.jobs > 0 ? Math.round((a.completed / a.jobs) * 100) : null;
+            return `<tr><td>${escapeHtml(a.name)}</td><td>${a.batches}</td><td>${a.jobs}</td><td>${a.completed}</td><td>${rate === null ? "—" : rate + "%"}</td></tr>`;
+          })
+          .join("")}
+      </tbody></table>`;
+    } else {
+      agenciesCard.hidden = true;
+    }
+
+    if (data.workers.length > 0) {
+      workersCard.hidden = false;
+      const agencyName = (id) => agenciesCache.find((a) => a.id === id)?.name || "—";
+      document.getElementById("analytics-workers").innerHTML = `<table><thead><tr><th>Worker</th><th>Agence</th><th>Terminés</th><th>Actif</th><th>Vu la dernière fois</th></tr></thead><tbody>
+        ${data.workers
+          .map(
+            (w) =>
+              `<tr><td>${escapeHtml(w.name)}</td><td>${escapeHtml(agencyName(w.agency_id))}</td><td>${w.completed_count}</td><td>${w.active ? "Oui" : "Révoqué"}</td><td>${fmtDate(w.last_seen_at)}</td></tr>`
+          )
+          .join("")}
+      </tbody></table>`;
+    } else {
+      workersCard.hidden = true;
+    }
+  } catch (e) {
+    summaryEl.innerHTML = `<div class="empty">Erreur : ${escapeHtml(e.message)}</div>`;
+    barsEl.innerHTML = "";
   }
 }
 
