@@ -185,6 +185,13 @@
   .back-link:hover { gap: 7px; }
   .job-detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 
+  .job-thumb { width: 44px; height: 32px; object-fit: cover; border-radius: 5px; border: 1px solid var(--line); display: block; }
+  .job-thumb-placeholder { width: 44px; height: 32px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--line); }
+  .vehicle-name { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 10px; }
+  .vehicle-gallery { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .vehicle-gallery img { width: 130px; height: 96px; object-fit: cover; border-radius: 9px; border: 1px solid var(--line); cursor: pointer; transition: transform .15s ease, border-color .15s ease; }
+  .vehicle-gallery img:hover { transform: scale(1.04); border-color: var(--line-strong); }
+
   .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 18px; }
   .stat-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; box-shadow: var(--shadow-sm); transition: border-color .2s ease; }
   .stat-card:hover { border-color: var(--line-strong); }
@@ -285,6 +292,7 @@
           <span id="job-detail-status"></span>
         </div>
         <div id="job-detail-url" style="font-size:12px; color:#667; margin-bottom:12px; word-break:break-all;"></div>
+        <div id="job-detail-vehicle"></div>
         <div id="job-events-list"><div class="empty">Chargement...</div></div>
       </div>
     </section>

@@ -1015,17 +1015,23 @@ async function openBatchDetail(batchId) {
       el.innerHTML = '<div class="empty">Aucun v\xE9hicule dans ce batch.</div>';
       return;
     }
-    el.innerHTML = `<table><thead><tr><th>Statut</th><th>\xC9tape</th><th>URL source</th><th>Tentatives</th><th>Cr\xE9\xE9 le</th><th></th></tr></thead><tbody>
-      ${vehicle_jobs.map(
-      (j) => `<tr class="clickable" data-job-id="${escapeHtml(j.id)}">
+    el.innerHTML = `<table><thead><tr><th></th><th>Statut</th><th>\xC9tape</th><th>V\xE9hicule / URL source</th><th>Tentatives</th><th>Cr\xE9\xE9 le</th><th></th></tr></thead><tbody>
+      ${vehicle_jobs.map((j) => {
+      const photo = j.vehicle_data?.photos?.[0];
+      const vname = j.vehicle_data ? [j.vehicle_data.marque, j.vehicle_data.modele].filter(Boolean).join(" ") : "";
+      return `<tr class="clickable" data-job-id="${escapeHtml(j.id)}">
+            <td>${photo ? `<img class="job-thumb" src="${escapeHtml(photo)}" loading="lazy" alt="" />` : '<div class="job-thumb-placeholder"></div>'}</td>
             <td><span class="badge ${escapeHtml(j.status)}">${escapeHtml(j.status)}</span></td>
             <td>${escapeHtml(j.current_step || "\u2014")}</td>
-            <td style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(j.source_url)}</td>
+            <td style="max-width:260px;">
+              ${vname ? `<div style="font-weight:600;">${escapeHtml(vname)}</div>` : ""}
+              <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink-faint); font-size:11px;">${escapeHtml(j.source_url)}</div>
+            </td>
             <td>${j.retry_count}</td>
             <td>${fmtDate(j.created_at)}</td>
             <td>${TERMINAL_STATUSES.has(j.status) ? "" : `<button class="danger" data-cancel-job="${escapeHtml(j.id)}">Annuler</button>`}</td>
-          </tr>`
-    ).join("")}
+          </tr>`;
+    }).join("")}
     </tbody></table>`;
     el.querySelectorAll("tr.clickable").forEach((tr) => {
       tr.addEventListener("click", () => openJobDetail(tr.dataset.jobId));
@@ -1045,9 +1051,11 @@ async function openJobDetail(jobId) {
   const listEl = document.getElementById("job-events-list");
   const statusEl2 = document.getElementById("job-detail-status");
   const urlEl = document.getElementById("job-detail-url");
+  const vehicleEl = document.getElementById("job-detail-vehicle");
   listEl.innerHTML = '<div class="empty">Chargement...</div>';
   statusEl2.innerHTML = "";
   urlEl.textContent = "";
+  vehicleEl.innerHTML = "";
   try {
     const [{ vehicle_job }, { events }] = await Promise.all([
       apiFetch(`/api/admin/jobs/${jobId}`),
@@ -1059,6 +1067,15 @@ async function openJobDetail(jobId) {
       document.getElementById("btn-cancel-job-detail").addEventListener("click", () => cancelJob(jobId, () => openJobDetail(jobId)));
     }
     urlEl.textContent = vehicle_job.source_url;
+    const vd = vehicle_job.vehicle_data;
+    if (vd) {
+      const vname = [vd.marque, vd.modele, vd.annee_modele].filter(Boolean).join(" ");
+      let html = vname ? `<div class="vehicle-name">${escapeHtml(vname)}</div>` : "";
+      if (vd.photos && vd.photos.length) {
+        html += `<div class="vehicle-gallery">${vd.photos.map((p) => `<a href="${escapeHtml(p)}" target="_blank" rel="noopener"><img src="${escapeHtml(p)}" loading="lazy" alt="" /></a>`).join("")}</div>`;
+      }
+      vehicleEl.innerHTML = html;
+    }
     if (events.length === 0) {
       listEl.innerHTML = '<div class="empty">Aucun \xE9v\xE9nement pour le moment.</div>';
       return;

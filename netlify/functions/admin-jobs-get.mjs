@@ -14,10 +14,14 @@ export default async (req, context) => {
   if (!user) return unauthenticatedResponse();
 
   const { id } = context.params;
+  // vehicle_data (marque/modèle/photos de référence, voir vehicleSummaryForServer
+  // côté extension) sert uniquement à identifier visuellement le véhicule --
+  // volontairement léger, jamais l'objet vehicle complet.
   const rows = await sql`
-    SELECT vj.*, b.agency_id AS batch_agency_id, b.created_by AS batch_created_by
+    SELECT vj.*, b.agency_id AS batch_agency_id, b.created_by AS batch_created_by, jr.vehicle_data
     FROM vehicle_jobs vj
     JOIN batches b ON b.id = vj.batch_id
+    LEFT JOIN job_results jr ON jr.vehicle_job_id = vj.id
     WHERE vj.id = ${id}
   `;
   const job = rows[0];

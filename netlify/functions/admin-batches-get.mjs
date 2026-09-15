@@ -24,9 +24,15 @@ export default async (req, context) => {
     return forbiddenResponse("Ce batch ne vous appartient pas");
   }
 
+  // vehicle_data (marque/modèle/photos de référence, voir vehicleSummaryForServer
+  // côté extension) sert uniquement à identifier visuellement le véhicule sur
+  // le dashboard -- volontairement léger (jamais l'objet vehicle complet).
   const jobs = await sql`
-    SELECT id, source_url, source_domain, status, current_step, worker_id, retry_count, created_at, started_at, completed_at
-    FROM vehicle_jobs WHERE batch_id = ${id} ORDER BY created_at
+    SELECT vj.id, vj.source_url, vj.source_domain, vj.status, vj.current_step, vj.worker_id, vj.retry_count,
+      vj.created_at, vj.started_at, vj.completed_at, jr.vehicle_data
+    FROM vehicle_jobs vj
+    LEFT JOIN job_results jr ON jr.vehicle_job_id = vj.id
+    WHERE vj.batch_id = ${id} ORDER BY vj.created_at
   `;
   return new Response(JSON.stringify({ batch, vehicle_jobs: jobs }), { status: 200, headers: { "Content-Type": "application/json" } });
 };
