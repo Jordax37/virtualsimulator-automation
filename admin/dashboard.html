@@ -23,13 +23,71 @@
     margin-left: 14px; padding: 6px 12px; background: white; color: #9c2b2b;
     border: 1px solid #e5c6c6; border-radius: 6px; font-size: 11.5px; cursor: pointer;
   }
-  main { padding: 24px; max-width: 900px; margin: 0 auto; }
-  .placeholder {
-    background: white; border: 1px dashed #d5dde0; border-radius: 10px;
-    padding: 40px; text-align: center; color: #889; font-size: 13px;
-  }
+  main { padding: 24px; max-width: 1000px; margin: 0 auto; }
   #status { padding: 12px 24px; font-size: 12px; }
   #status.error { color: #9c2b2b; }
+
+  nav.tabs { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid #e5e9eb; }
+  nav.tabs button {
+    padding: 9px 16px; background: none; border: none; border-bottom: 2px solid transparent;
+    font-size: 12.5px; font-weight: 600; color: #667; cursor: pointer;
+  }
+  nav.tabs button.active { color: #7a3fe0; border-bottom-color: #7a3fe0; }
+  nav.tabs button[hidden] { display: none; }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .card { background: white; border: 1px solid #e5e9eb; border-radius: 10px; padding: 18px; margin-bottom: 18px; }
+  .card h2 { font-size: 13px; margin: 0 0 14px; }
+  .row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 160px; }
+  label { display: block; font-size: 11px; color: #445; margin-bottom: 4px; }
+  input, select, textarea {
+    width: 100%; padding: 8px 9px; border: 1px solid #d5dde0; border-radius: 6px; font-size: 12.5px;
+  }
+  textarea { min-height: 70px; font-family: monospace; }
+  .checkbox-row { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+  .checkbox-row input { width: auto; }
+  button.primary {
+    padding: 9px 16px; background: #7a3fe0; color: white; border: none;
+    border-radius: 7px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  }
+  button.secondary {
+    padding: 7px 12px; background: white; color: #7a3fe0; border: 1px solid #d9c8f5;
+    border-radius: 7px; font-size: 11.5px; cursor: pointer;
+  }
+  button.danger {
+    padding: 6px 10px; background: white; color: #9c2b2b; border: 1px solid #e5c6c6;
+    border-radius: 6px; font-size: 11px; cursor: pointer;
+  }
+  .form-error { color: #9c2b2b; font-size: 11.5px; margin-top: 6px; min-height: 14px; }
+  .form-ok { color: #1a7a3c; font-size: 11.5px; margin-top: 6px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid #eef1f2; }
+  th { color: #667; font-weight: 600; font-size: 10.5px; text-transform: uppercase; }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover { background: #f7f5fd; }
+  .empty { color: #99a; font-size: 12px; padding: 16px; text-align: center; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; text-transform: uppercase; }
+  .badge.queued, .badge.claimed { background: #eef2fb; color: #3a5fc0; }
+  .badge.running { background: #fff3d6; color: #a8720a; }
+  .badge.action_required { background: #ffe6d6; color: #b0500a; }
+  .badge.retrying { background: #fff0f0; color: #b02a2a; }
+  .badge.completed { background: #e4f7e9; color: #1a7a3c; }
+  .badge.failed { background: #fbe3e3; color: #9c2b2b; }
+  .badge.cancelled, .badge.paused { background: #eee; color: #778; }
+
+  .token-reveal {
+    background: #fffaf0; border: 1px solid #f0d9a0; border-radius: 8px; padding: 12px;
+    font-size: 12px; margin-bottom: 14px;
+  }
+  .token-reveal code { display: block; margin-top: 6px; padding: 8px; background: white; border-radius: 6px; word-break: break-all; font-size: 11.5px; }
+
+  .back-link { font-size: 12px; color: #7a3fe0; cursor: pointer; margin-bottom: 12px; display: inline-block; }
+  .job-detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 </style>
 </head>
 <body>
@@ -44,10 +102,124 @@
   <div id="status"></div>
 
   <main>
-    <div class="placeholder">
-      Dashboard minimal — étape 2.<br />
-      La création de traitements, le suivi des véhicules et les logs arriveront à l'étape API (batches/vehicle_jobs).
-    </div>
+    <nav class="tabs">
+      <button class="tab-btn active" data-panel="batches">Batches</button>
+      <button class="tab-btn" data-panel="workers" id="tab-btn-workers" hidden>Workers</button>
+      <button class="tab-btn" data-panel="users" id="tab-btn-users" hidden>Utilisateurs</button>
+    </nav>
+
+    <!-- ===== BATCHES : liste ===== -->
+    <section class="panel active" id="panel-batches">
+      <div class="card" id="create-batch-card">
+        <h2>Nouveau batch</h2>
+        <div class="row">
+          <div id="batch-agency-field" hidden>
+            <label>Agence</label>
+            <select id="batch-agency"></select>
+          </div>
+          <div>
+            <label>Marge (€)</label>
+            <select id="batch-margin">
+              <option value="1990">1 990 €</option>
+              <option value="4990">4 990 €</option>
+              <option value="0">Aucune (0 €)</option>
+            </select>
+          </div>
+        </div>
+        <label class="checkbox-row" style="margin-bottom:10px;">
+          <input type="checkbox" id="batch-vehicule-us" /> Véhicule US
+        </label>
+        <label>URLs des annonces (une par ligne)</label>
+        <textarea id="batch-urls" placeholder="https://www.mobile.de/...&#10;https://www.autoscout24.net/..."></textarea>
+        <div style="margin-top:10px;">
+          <button class="primary" id="btn-create-batch">Créer le batch</button>
+        </div>
+        <div class="form-error" id="batch-form-error"></div>
+      </div>
+
+      <div class="card" id="batches-list-card">
+        <h2>Batches existants</h2>
+        <div id="batches-list"><div class="empty">Chargement...</div></div>
+      </div>
+    </section>
+
+    <!-- ===== BATCHES : détail (jobs d'un batch) ===== -->
+    <section class="panel" id="panel-batch-detail">
+      <span class="back-link" id="back-to-batches">← Retour aux batches</span>
+      <div class="card">
+        <h2>Véhicules de ce batch</h2>
+        <div id="batch-detail-jobs"><div class="empty">Chargement...</div></div>
+      </div>
+    </section>
+
+    <!-- ===== JOB : détail (événements) ===== -->
+    <section class="panel" id="panel-job-detail">
+      <span class="back-link" id="back-to-batch-detail">← Retour au batch</span>
+      <div class="card">
+        <div class="job-detail-header">
+          <h2 style="margin:0;">Journal du véhicule</h2>
+          <span id="job-detail-status"></span>
+        </div>
+        <div id="job-detail-url" style="font-size:12px; color:#667; margin-bottom:12px; word-break:break-all;"></div>
+        <div id="job-events-list"><div class="empty">Chargement...</div></div>
+      </div>
+    </section>
+
+    <!-- ===== WORKERS ===== -->
+    <section class="panel" id="panel-workers">
+      <div class="card">
+        <h2>Nouveau worker</h2>
+        <div class="row">
+          <div>
+            <label>Nom du PC (ex: ORLEANS-PC-02)</label>
+            <input type="text" id="worker-name" placeholder="ORLEANS-PC-02" />
+          </div>
+          <div>
+            <label>Agence</label>
+            <select id="worker-agency"></select>
+          </div>
+        </div>
+        <button class="primary" id="btn-create-worker">Créer le worker</button>
+        <div class="form-error" id="worker-form-error"></div>
+        <div id="worker-token-reveal"></div>
+      </div>
+      <div class="card">
+        <h2>Workers existants</h2>
+        <div id="workers-list"><div class="empty">Chargement...</div></div>
+      </div>
+    </section>
+
+    <!-- ===== UTILISATEURS ===== -->
+    <section class="panel" id="panel-users">
+      <div class="card">
+        <h2>Nouveau collaborateur</h2>
+        <div class="row">
+          <div>
+            <label>Email</label>
+            <input type="email" id="user-email" placeholder="prenom.nom@virtual-group.fr" />
+          </div>
+          <div>
+            <label>Rôle</label>
+            <select id="user-role">
+              <option value="commercial">Commercial</option>
+              <option value="manager">Manager</option>
+              <option value="administrateur">Administrateur</option>
+            </select>
+          </div>
+          <div id="user-agency-field">
+            <label>Agence</label>
+            <select id="user-agency"></select>
+          </div>
+        </div>
+        <button class="primary" id="btn-create-user">Pré-provisionner le compte</button>
+        <div class="form-error" id="user-form-error"></div>
+        <div class="hint" style="font-size:11px;color:#889;margin-top:6px;">La personne devra ensuite être invitée depuis Netlify Identity (dashboard Netlify) pour activer son compte.</div>
+      </div>
+      <div class="card">
+        <h2>Collaborateurs existants</h2>
+        <div id="users-list"><div class="empty">Chargement...</div></div>
+      </div>
+    </section>
   </main>
 
   <script type="module" src="dashboard.js"></script>

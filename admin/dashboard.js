@@ -697,9 +697,9 @@ var logout = async () => {
   }
   const client = getClient();
   try {
-    const currentUser2 = client.currentUser();
-    if (currentUser2) {
-      await currentUser2.logout();
+    const currentUser3 = client.currentUser();
+    if (currentUser3) {
+      await currentUser3.logout();
     }
     deleteBrowserAuthCookies();
     stopTokenRefresh();
@@ -711,10 +711,10 @@ var logout = async () => {
 var hydrateSession = async () => {
   if (!isBrowser2()) return null;
   const client = getClient();
-  const currentUser2 = client.currentUser();
-  if (currentUser2) {
+  const currentUser3 = client.currentUser();
+  if (currentUser3) {
     startTokenRefresh();
-    return toUser(currentUser2);
+    return toUser(currentUser3);
   }
   const accessToken = getCookie(NF_JWT_COOKIE);
   if (!accessToken) return null;
@@ -831,18 +831,18 @@ var resolveIdentityUrl = () => {
 var getUser = async () => {
   if (isBrowser2()) {
     const client = getGoTrueClient();
-    const currentUser2 = client?.currentUser() ?? null;
-    if (currentUser2) {
+    const currentUser3 = client?.currentUser() ?? null;
+    if (currentUser3) {
       const jwt2 = getCookie(NF_JWT_COOKIE);
       if (!jwt2) {
         try {
-          currentUser2.clearSession();
+          currentUser3.clearSession();
         } catch {
         }
         return null;
       }
       startTokenRefresh();
-      return toUser(currentUser2);
+      return toUser(currentUser3);
     }
     const jwt = getCookie(NF_JWT_COOKIE);
     if (!jwt) return null;
@@ -869,6 +869,25 @@ var getUser = async () => {
 var statusEl = document.getElementById("status");
 var badgeEl = document.getElementById("user-badge");
 var logoutBtn = document.getElementById("btn-logout");
+var currentUser2 = null;
+var agenciesCache = [];
+function escapeHtml(str) {
+  return String(str ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+function fmtDate(iso) {
+  if (!iso) return "\u2014";
+  return new Date(iso).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+async function apiFetch(path, options) {
+  const res = await fetch(path, options);
+  if (res.status === 401) {
+    window.location.href = "/admin/login.html";
+    throw new Error("Session expir\xE9e");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Erreur HTTP ${res.status}`);
+  return data;
+}
 async function init() {
   let identityUser;
   try {
@@ -882,22 +901,27 @@ async function init() {
     return;
   }
   await loadUserInfo();
+  if (!currentUser2) return;
+  setupTabs();
+  setupForms();
+  try {
+    agenciesCache = (await apiFetch("/api/admin/agencies")).agencies;
+  } catch (e) {
+    agenciesCache = [];
+  }
+  applyRoleVisibility();
+  populateAgencySelects();
+  loadBatches();
+  if (currentUser2.role === "administrateur" || currentUser2.role === "manager") {
+    loadWorkers();
+    loadUsers();
+  }
 }
 async function loadUserInfo() {
   try {
-    const res = await fetch("/api/admin/whoami");
-    if (res.status === 401) {
-      window.location.href = "/admin/login.html";
-      return;
-    }
-    if (res.status === 403) {
-      statusEl.className = "error";
-      statusEl.textContent = "Compte non autoris\xE9 sur cet espace. Contactez un administrateur.";
-      return;
-    }
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const data = await res.json();
-    badgeEl.innerHTML = data.email + '<br><span class="role">' + data.role + "</span>";
+    const data = await apiFetch("/api/admin/whoami");
+    currentUser2 = { id: data.user_id, email: data.email, role: data.role, agencyId: data.agency_id };
+    badgeEl.innerHTML = escapeHtml(data.email) + '<br><span class="role">' + escapeHtml(data.role) + "</span>";
   } catch (e) {
     statusEl.className = "error";
     statusEl.textContent = "Impossible de v\xE9rifier le compte : " + e.message;
@@ -907,5 +931,258 @@ logoutBtn.addEventListener("click", async () => {
   await logout();
   window.location.href = "/admin/login.html";
 });
+function applyRoleVisibility() {
+  const canManage = currentUser2.role === "administrateur" || currentUser2.role === "manager";
+  document.getElementById("tab-btn-workers").hidden = !canManage;
+  document.getElementById("tab-btn-users").hidden = !canManage;
+  document.getElementById("batch-agency-field").hidden = currentUser2.role !== "administrateur";
+  if (currentUser2.role === "manager") {
+    document.getElementById("worker-agency").disabled = true;
+    document.getElementById("user-agency").disabled = true;
+  }
+}
+function populateAgencySelects() {
+  const options = agenciesCache.map((a) => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join("");
+  for (const id of ["batch-agency", "worker-agency", "user-agency"]) {
+    const el = document.getElementById(id);
+    el.innerHTML = options || '<option value="">Aucune agence disponible</option>';
+    if (currentUser2.role !== "administrateur" && currentUser2.agencyId) el.value = currentUser2.agencyId;
+  }
+}
+function showPanel(name) {
+  document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
+  document.getElementById("panel-" + name).classList.add("active");
+}
+function setupTabs() {
+  document.querySelectorAll("nav.tabs .tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("nav.tabs .tab-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      showPanel(btn.dataset.panel);
+    });
+  });
+  document.getElementById("back-to-batches").addEventListener("click", () => {
+    document.querySelectorAll("nav.tabs .tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.panel === "batches"));
+    showPanel("batches");
+  });
+  document.getElementById("back-to-batch-detail").addEventListener("click", () => showPanel("batch-detail"));
+}
+async function loadBatches() {
+  const el = document.getElementById("batches-list");
+  el.innerHTML = '<div class="empty">Chargement...</div>';
+  try {
+    const { batches } = await apiFetch("/api/admin/batches");
+    if (batches.length === 0) {
+      el.innerHTML = '<div class="empty">Aucun batch pour le moment.</div>';
+      return;
+    }
+    const agencyName = (id) => agenciesCache.find((a) => a.id === id)?.name || "\u2014";
+    el.innerHTML = `<table><thead><tr><th>Cr\xE9\xE9 le</th><th>Agence</th><th>Marge</th><th>V\xE9hicule US</th></tr></thead><tbody>
+      ${batches.map(
+      (b) => `<tr class="clickable" data-batch-id="${escapeHtml(b.id)}">
+            <td>${fmtDate(b.created_at)}</td>
+            <td>${escapeHtml(agencyName(b.agency_id))}</td>
+            <td>${b.margin} \u20AC</td>
+            <td>${b.vehicule_us ? "Oui" : "Non"}</td>
+          </tr>`
+    ).join("")}
+    </tbody></table>`;
+    el.querySelectorAll("tr.clickable").forEach((tr) => {
+      tr.addEventListener("click", () => openBatchDetail(tr.dataset.batchId));
+    });
+  } catch (e) {
+    el.innerHTML = `<div class="empty">Erreur : ${escapeHtml(e.message)}</div>`;
+  }
+}
+async function openBatchDetail(batchId) {
+  showPanel("batch-detail");
+  const el = document.getElementById("batch-detail-jobs");
+  el.innerHTML = '<div class="empty">Chargement...</div>';
+  try {
+    const { vehicle_jobs } = await apiFetch(`/api/admin/batches/${batchId}`);
+    if (vehicle_jobs.length === 0) {
+      el.innerHTML = '<div class="empty">Aucun v\xE9hicule dans ce batch.</div>';
+      return;
+    }
+    el.innerHTML = `<table><thead><tr><th>Statut</th><th>\xC9tape</th><th>URL source</th><th>Tentatives</th><th>Cr\xE9\xE9 le</th></tr></thead><tbody>
+      ${vehicle_jobs.map(
+      (j) => `<tr class="clickable" data-job-id="${escapeHtml(j.id)}">
+            <td><span class="badge ${escapeHtml(j.status)}">${escapeHtml(j.status)}</span></td>
+            <td>${escapeHtml(j.current_step || "\u2014")}</td>
+            <td style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(j.source_url)}</td>
+            <td>${j.retry_count}</td>
+            <td>${fmtDate(j.created_at)}</td>
+          </tr>`
+    ).join("")}
+    </tbody></table>`;
+    el.querySelectorAll("tr.clickable").forEach((tr) => {
+      tr.addEventListener("click", () => openJobDetail(tr.dataset.jobId));
+    });
+  } catch (e) {
+    el.innerHTML = `<div class="empty">Erreur : ${escapeHtml(e.message)}</div>`;
+  }
+}
+async function openJobDetail(jobId) {
+  showPanel("job-detail");
+  const listEl = document.getElementById("job-events-list");
+  const statusEl2 = document.getElementById("job-detail-status");
+  const urlEl = document.getElementById("job-detail-url");
+  listEl.innerHTML = '<div class="empty">Chargement...</div>';
+  statusEl2.innerHTML = "";
+  urlEl.textContent = "";
+  try {
+    const [{ vehicle_job }, { events }] = await Promise.all([
+      apiFetch(`/api/admin/jobs/${jobId}`),
+      apiFetch(`/api/admin/jobs/${jobId}/events`)
+    ]);
+    statusEl2.innerHTML = `<span class="badge ${escapeHtml(vehicle_job.status)}">${escapeHtml(vehicle_job.status)}</span>`;
+    urlEl.textContent = vehicle_job.source_url;
+    if (events.length === 0) {
+      listEl.innerHTML = '<div class="empty">Aucun \xE9v\xE9nement pour le moment.</div>';
+      return;
+    }
+    listEl.innerHTML = `<table><thead><tr><th>Heure</th><th>Niveau</th><th>\xC9tape</th><th>Message</th></tr></thead><tbody>
+      ${events.map(
+      (e) => `<tr>
+            <td>${fmtDate(e.timestamp)}</td>
+            <td>${escapeHtml(e.level)}</td>
+            <td>${escapeHtml(e.step || "\u2014")}</td>
+            <td>${escapeHtml(e.message)}${e.progress_total ? ` (${e.progress_current}/${e.progress_total})` : ""}</td>
+          </tr>`
+    ).join("")}
+    </tbody></table>`;
+  } catch (e) {
+    listEl.innerHTML = `<div class="empty">Erreur : ${escapeHtml(e.message)}</div>`;
+  }
+}
+function setupForms() {
+  document.getElementById("btn-create-batch").addEventListener("click", async () => {
+    const errEl = document.getElementById("batch-form-error");
+    errEl.textContent = "";
+    const urls = document.getElementById("batch-urls").value.split("\n").map((u) => u.trim()).filter(Boolean);
+    if (urls.length === 0) {
+      errEl.textContent = "Au moins une URL est requise.";
+      return;
+    }
+    const body = {
+      urls,
+      margin: document.getElementById("batch-margin").value,
+      vehicule_us: document.getElementById("batch-vehicule-us").checked
+    };
+    if (currentUser2.role === "administrateur") body.agency_id = document.getElementById("batch-agency").value;
+    try {
+      await apiFetch("/api/admin/batches", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      document.getElementById("batch-urls").value = "";
+      loadBatches();
+    } catch (e) {
+      errEl.textContent = e.message;
+    }
+  });
+  document.getElementById("btn-create-worker").addEventListener("click", async () => {
+    const errEl = document.getElementById("worker-form-error");
+    errEl.textContent = "";
+    const name = document.getElementById("worker-name").value.trim();
+    const agency_id = document.getElementById("worker-agency").value;
+    if (!name) {
+      errEl.textContent = "Le nom du PC est requis.";
+      return;
+    }
+    try {
+      const { worker, token } = await apiFetch("/api/admin/workers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, agency_id })
+      });
+      document.getElementById("worker-name").value = "";
+      document.getElementById("worker-token-reveal").innerHTML = `<div class="token-reveal">
+        \u26A0\uFE0F Token pour <strong>${escapeHtml(worker.name)}</strong> \u2014 copiez-le maintenant, il ne sera plus jamais affich\xE9 :
+        <code>${escapeHtml(token)}</code>
+      </div>`;
+      loadWorkers();
+    } catch (e) {
+      errEl.textContent = e.message;
+    }
+  });
+  document.getElementById("btn-create-user").addEventListener("click", async () => {
+    const errEl = document.getElementById("user-form-error");
+    errEl.textContent = "";
+    const email = document.getElementById("user-email").value.trim();
+    const role = document.getElementById("user-role").value;
+    const body = { email, role };
+    if (role !== "administrateur") body.agency_id = document.getElementById("user-agency").value;
+    if (!email) {
+      errEl.textContent = "L'email est requis.";
+      return;
+    }
+    try {
+      await apiFetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      document.getElementById("user-email").value = "";
+      loadUsers();
+    } catch (e) {
+      errEl.textContent = e.message;
+    }
+  });
+}
+async function loadWorkers() {
+  const el = document.getElementById("workers-list");
+  el.innerHTML = '<div class="empty">Chargement...</div>';
+  try {
+    const { workers } = await apiFetch("/api/admin/workers");
+    if (workers.length === 0) {
+      el.innerHTML = '<div class="empty">Aucun worker pour le moment.</div>';
+      return;
+    }
+    const agencyName = (id) => agenciesCache.find((a) => a.id === id)?.name || "\u2014";
+    el.innerHTML = `<table><thead><tr><th>Nom</th><th>Agence</th><th>Actif</th><th>Vu la derni\xE8re fois</th><th></th></tr></thead><tbody>
+      ${workers.map(
+      (w) => `<tr data-worker-id="${escapeHtml(w.id)}">
+            <td>${escapeHtml(w.name)}</td>
+            <td>${escapeHtml(agencyName(w.agency_id))}</td>
+            <td>${w.active ? "Oui" : "R\xE9voqu\xE9"}</td>
+            <td>${fmtDate(w.last_seen_at)}</td>
+            <td>${w.active ? `<button class="danger" data-revoke="${escapeHtml(w.id)}">R\xE9voquer</button>` : ""}</td>
+          </tr>`
+    ).join("")}
+    </tbody></table>`;
+    el.querySelectorAll("[data-revoke]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!confirm("R\xE9voquer ce worker ? Il ne pourra plus s'authentifier.")) return;
+        try {
+          await apiFetch(`/api/admin/workers/${btn.dataset.revoke}/revoke`, { method: "POST" });
+          loadWorkers();
+        } catch (e) {
+          alert("Erreur : " + e.message);
+        }
+      });
+    });
+  } catch (e) {
+    el.innerHTML = `<div class="empty">Erreur : ${escapeHtml(e.message)}</div>`;
+  }
+}
+async function loadUsers() {
+  const el = document.getElementById("users-list");
+  el.innerHTML = '<div class="empty">Chargement...</div>';
+  try {
+    const { users } = await apiFetch("/api/admin/users");
+    if (users.length === 0) {
+      el.innerHTML = '<div class="empty">Aucun collaborateur pour le moment.</div>';
+      return;
+    }
+    const agencyName = (id) => id ? agenciesCache.find((a) => a.id === id)?.name || "\u2014" : "Toutes";
+    el.innerHTML = `<table><thead><tr><th>Email</th><th>R\xF4le</th><th>Agence</th><th>Compte activ\xE9</th><th>Cr\xE9\xE9 le</th></tr></thead><tbody>
+      ${users.map(
+      (u) => `<tr>
+            <td>${escapeHtml(u.email)}</td>
+            <td>${escapeHtml(u.role)}</td>
+            <td>${escapeHtml(agencyName(u.agency_id))}</td>
+            <td>${u.linked ? "Oui" : "En attente"}</td>
+            <td>${fmtDate(u.created_at)}</td>
+          </tr>`
+    ).join("")}
+    </tbody></table>`;
+  } catch (e) {
+    el.innerHTML = `<div class="empty">Erreur : ${escapeHtml(e.message)}</div>`;
+  }
+}
 init();
 //# sourceMappingURL=dashboard.js.map

@@ -1,7 +1,9 @@
 // Source du bundle admin/dashboard.js -- session vérifiée via getUser()
 // (cookie nf_jwt same-origin), plus rien envoyé manuellement en header.
-//
-// ⚠️ NON TESTÉ EN CONDITIONS RÉELLES -- voir la même remarque que login.js.
+// Toute autorisation affichée ici (rôle, agence, ce qui est visible/caché)
+// est un simple confort d'UX : chaque appel /api/admin/* reste vérifié
+// indépendamment côté serveur (voir lib/user-auth.mjs et access-control.mjs),
+// donc rien ici n'est une garantie de sécurité en soi.
 
 import { getUser, logout } from "@netlify/identity";
 
@@ -9,46 +11,69 @@ const statusEl = document.getElementById("status");
 const badgeEl = document.getElementById("user-badge");
 const logoutBtn = document.getElementById("btn-logout");
 
+let currentUser = null;
+let agenciesCache = [];
+
+function escapeHtml(str) {
+  return String(str ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function fmtDate(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+async function apiFetch(path, options) {
+  const res = await fetch(path, options);
+  if (res.status === 401) {
+    window.location.href = "/admin/login.html";
+    throw new Error("Session expirée");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Erreur HTTP ${res.status}`);
+  return data;
+}
+
+// ---------- Initialisation ----------
+
 async function init() {
   let identityUser;
   try {
     identityUser = await getUser();
   } catch (e) {
-    // getUser() est documenté "never throws" -- ce filet est une garantie
-    // supplémentaire pour ne jamais laisser la page bloquée sur
-    // "Chargement..." si ce n'était pas le cas en pratique.
     console.error("getUser() a levé une exception :", e);
     identityUser = null;
   }
   if (!identityUser) {
-    // Redirection CÔTÉ CLIENT uniquement (confort/UX) -- si quelqu'un
-    // contourne ce script, chaque appel /api/admin/* reste protégé
-    // indépendamment côté serveur (voir lib/user-auth.mjs).
     window.location.href = "/admin/login.html";
     return;
   }
   await loadUserInfo();
+  if (!currentUser) return;
+
+  setupTabs();
+  setupForms();
+
+  try {
+    agenciesCache = (await apiFetch("/api/admin/agencies")).agencies;
+  } catch (e) {
+    agenciesCache = [];
+  }
+  applyRoleVisibility();
+  populateAgencySelects();
+
+  loadBatches();
+  if (currentUser.role === "administrateur" || currentUser.role === "manager") {
+    loadWorkers();
+    loadUsers();
+  }
 }
 
 async function loadUserInfo() {
   try {
-    // Aucun header Authorization : le cookie nf_jwt part automatiquement
-    // avec une requête same-origin, getUser() côté serveur le lit seul.
-    // Le rôle affiché ici vient de la réponse serveur (source de vérité :
-    // notre table `users`), jamais d'une donnée décidée par ce script.
-    const res = await fetch("/api/admin/whoami");
-    if (res.status === 401) {
-      window.location.href = "/admin/login.html";
-      return;
-    }
-    if (res.status === 403) {
-      statusEl.className = "error";
-      statusEl.textContent = "Compte non autorisé sur cet espace. Contactez un administrateur.";
-      return;
-    }
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const data = await res.json();
-    badgeEl.innerHTML = data.email + '<br><span class="role">' + data.role + "</span>";
+    const data = await apiFetch("/api/admin/whoami");
+    currentUser = { id: data.user_id, email: data.email, role: data.role, agencyId: data.agency_id };
+    badgeEl.innerHTML = escapeHtml(data.email) + '<br><span class="role">' + escapeHtml(data.role) + "</span>";
   } catch (e) {
     statusEl.className = "error";
     statusEl.textContent = "Impossible de vérifier le compte : " + e.message;
@@ -59,5 +84,298 @@ logoutBtn.addEventListener("click", async () => {
   await logout();
   window.location.href = "/admin/login.html";
 });
+
+function applyRoleVisibility() {
+  const canManage = currentUser.role === "administrateur" || currentUser.role === "manager";
+  document.getElementById("tab-btn-workers").hidden = !canManage;
+  document.getElementById("tab-btn-users").hidden = !canManage;
+  // Seul un administrateur choisit l'agence d'un batch -- manager/commercial
+  // sont automatiquement rattachés à la leur côté serveur.
+  document.getElementById("batch-agency-field").hidden = currentUser.role !== "administrateur";
+  // Un manager crée toujours pour sa propre agence -- le champ reste visible
+  // mais verrouillé, pour qu'il voie clairement laquelle sans pouvoir la changer.
+  if (currentUser.role === "manager") {
+    document.getElementById("worker-agency").disabled = true;
+    document.getElementById("user-agency").disabled = true;
+  }
+}
+
+function populateAgencySelects() {
+  const options = agenciesCache.map((a) => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join("");
+  for (const id of ["batch-agency", "worker-agency", "user-agency"]) {
+    const el = document.getElementById(id);
+    el.innerHTML = options || '<option value="">Aucune agence disponible</option>';
+    if (currentUser.role !== "administrateur" && currentUser.agencyId) el.value = currentUser.agencyId;
+  }
+}
+
+// ---------- Navigation ----------
+
+function showPanel(name) {
+  document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
+  document.getElementById("panel-" + name).classList.add("active");
+}
+
+function setupTabs() {
+  document.querySelectorAll("nav.tabs .tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("nav.tabs .tab-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      showPanel(btn.dataset.panel);
+    });
+  });
+  document.getElementById("back-to-batches").addEventListener("click", () => {
+    document.querySelectorAll("nav.tabs .tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.panel === "batches"));
+    showPanel("batches");
+  });
+  document.getElementById("back-to-batch-detail").addEventListener("click", () => showPanel("batch-detail"));
+}
+
+// ---------- Batches ----------
+
+async function loadBatches() {
+  const el = document.getElementById("batches-list");
+  el.innerHTML = '<div class="empty">Chargement...</div>';
+  try {
+    const { batches } = await apiFetch("/api/admin/batches");
+    if (batches.length === 0) {
+      el.innerHTML = '<div class="empty">Aucun batch pour le moment.</div>';
+      return;
+    }
+    const agencyName = (id) => agenciesCache.find((a) => a.id === id)?.name || "—";
+    el.innerHTML = `<table><thead><tr><th>Créé le</th><th>Agence</th><th>Marge</th><th>Véhicule US</th></tr></thead><tbody>
+      ${batches
+        .map(
+          (b) => `<tr class="clickable" data-batch-id="${escapeHtml(b.id)}">
+            <td>${fmtDate(b.created_at)}</td>
+            <td>${escapeHtml(agencyName(b.agency_id))}</td>
+            <td>${b.margin} €</td>
+            <td>${b.vehicule_us ? "Oui" : "Non"}</td>
+          </tr>`
+        )
+        .join("")}
+    </tbody></table>`;
+    el.querySelectorAll("tr.clickable").forEach((tr) => {
+      tr.addEventListener("click", () => openBatchDetail(tr.dataset.batchId));
+    });
+  } catch (e) {
+    el.innerHTML = `<div class="empty">Erreur : ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function openBatchDetail(batchId) {
+  showPanel("batch-detail");
+  const el = document.getElementById("batch-detail-jobs");
+  el.innerHTML = '<div class="empty">Chargement...</div>';
+  try {
+    const { vehicle_jobs } = await apiFetch(`/api/admin/batches/${batchId}`);
+    if (vehicle_jobs.length === 0) {
+      el.innerHTML = '<div class="empty">Aucun véhicule dans ce batch.</div>';
+      return;
+    }
+    el.innerHTML = `<table><thead><tr><th>Statut</th><th>Étape</th><th>URL source</th><th>Tentatives</th><th>Créé le</th></tr></thead><tbody>
+      ${vehicle_jobs
+        .map(
+          (j) => `<tr class="clickable" data-job-id="${escapeHtml(j.id)}">
+            <td><span class="badge ${escapeHtml(j.status)}">${escapeHtml(j.status)}</span></td>
+            <td>${escapeHtml(j.current_step || "—")}</td>
+            <td style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(j.source_url)}</td>
+            <td>${j.retry_count}</td>
+            <td>${fmtDate(j.created_at)}</td>
+          </tr>`
+        )
+        .join("")}
+    </tbody></table>`;
+    el.querySelectorAll("tr.clickable").forEach((tr) => {
+      tr.addEventListener("click", () => openJobDetail(tr.dataset.jobId));
+    });
+  } catch (e) {
+    el.innerHTML = `<div class="empty">Erreur : ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function openJobDetail(jobId) {
+  showPanel("job-detail");
+  const listEl = document.getElementById("job-events-list");
+  const statusEl2 = document.getElementById("job-detail-status");
+  const urlEl = document.getElementById("job-detail-url");
+  listEl.innerHTML = '<div class="empty">Chargement...</div>';
+  statusEl2.innerHTML = "";
+  urlEl.textContent = "";
+  try {
+    const [{ vehicle_job }, { events }] = await Promise.all([
+      apiFetch(`/api/admin/jobs/${jobId}`),
+      apiFetch(`/api/admin/jobs/${jobId}/events`),
+    ]);
+    statusEl2.innerHTML = `<span class="badge ${escapeHtml(vehicle_job.status)}">${escapeHtml(vehicle_job.status)}</span>`;
+    urlEl.textContent = vehicle_job.source_url;
+    if (events.length === 0) {
+      listEl.innerHTML = '<div class="empty">Aucun événement pour le moment.</div>';
+      return;
+    }
+    listEl.innerHTML = `<table><thead><tr><th>Heure</th><th>Niveau</th><th>Étape</th><th>Message</th></tr></thead><tbody>
+      ${events
+        .map(
+          (e) => `<tr>
+            <td>${fmtDate(e.timestamp)}</td>
+            <td>${escapeHtml(e.level)}</td>
+            <td>${escapeHtml(e.step || "—")}</td>
+            <td>${escapeHtml(e.message)}${e.progress_total ? ` (${e.progress_current}/${e.progress_total})` : ""}</td>
+          </tr>`
+        )
+        .join("")}
+    </tbody></table>`;
+  } catch (e) {
+    listEl.innerHTML = `<div class="empty">Erreur : ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ---------- Formulaires ----------
+
+function setupForms() {
+  document.getElementById("btn-create-batch").addEventListener("click", async () => {
+    const errEl = document.getElementById("batch-form-error");
+    errEl.textContent = "";
+    const urls = document
+      .getElementById("batch-urls")
+      .value.split("\n")
+      .map((u) => u.trim())
+      .filter(Boolean);
+    if (urls.length === 0) {
+      errEl.textContent = "Au moins une URL est requise.";
+      return;
+    }
+    const body = {
+      urls,
+      margin: document.getElementById("batch-margin").value,
+      vehicule_us: document.getElementById("batch-vehicule-us").checked,
+    };
+    if (currentUser.role === "administrateur") body.agency_id = document.getElementById("batch-agency").value;
+    try {
+      await apiFetch("/api/admin/batches", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      document.getElementById("batch-urls").value = "";
+      loadBatches();
+    } catch (e) {
+      errEl.textContent = e.message;
+    }
+  });
+
+  document.getElementById("btn-create-worker").addEventListener("click", async () => {
+    const errEl = document.getElementById("worker-form-error");
+    errEl.textContent = "";
+    const name = document.getElementById("worker-name").value.trim();
+    const agency_id = document.getElementById("worker-agency").value;
+    if (!name) {
+      errEl.textContent = "Le nom du PC est requis.";
+      return;
+    }
+    try {
+      const { worker, token } = await apiFetch("/api/admin/workers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, agency_id }),
+      });
+      document.getElementById("worker-name").value = "";
+      document.getElementById("worker-token-reveal").innerHTML = `<div class="token-reveal">
+        ⚠️ Token pour <strong>${escapeHtml(worker.name)}</strong> — copiez-le maintenant, il ne sera plus jamais affiché :
+        <code>${escapeHtml(token)}</code>
+      </div>`;
+      loadWorkers();
+    } catch (e) {
+      errEl.textContent = e.message;
+    }
+  });
+
+  document.getElementById("btn-create-user").addEventListener("click", async () => {
+    const errEl = document.getElementById("user-form-error");
+    errEl.textContent = "";
+    const email = document.getElementById("user-email").value.trim();
+    const role = document.getElementById("user-role").value;
+    const body = { email, role };
+    if (role !== "administrateur") body.agency_id = document.getElementById("user-agency").value;
+    if (!email) {
+      errEl.textContent = "L'email est requis.";
+      return;
+    }
+    try {
+      await apiFetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      document.getElementById("user-email").value = "";
+      loadUsers();
+    } catch (e) {
+      errEl.textContent = e.message;
+    }
+  });
+}
+
+// ---------- Workers ----------
+
+async function loadWorkers() {
+  const el = document.getElementById("workers-list");
+  el.innerHTML = '<div class="empty">Chargement...</div>';
+  try {
+    const { workers } = await apiFetch("/api/admin/workers");
+    if (workers.length === 0) {
+      el.innerHTML = '<div class="empty">Aucun worker pour le moment.</div>';
+      return;
+    }
+    const agencyName = (id) => agenciesCache.find((a) => a.id === id)?.name || "—";
+    el.innerHTML = `<table><thead><tr><th>Nom</th><th>Agence</th><th>Actif</th><th>Vu la dernière fois</th><th></th></tr></thead><tbody>
+      ${workers
+        .map(
+          (w) => `<tr data-worker-id="${escapeHtml(w.id)}">
+            <td>${escapeHtml(w.name)}</td>
+            <td>${escapeHtml(agencyName(w.agency_id))}</td>
+            <td>${w.active ? "Oui" : "Révoqué"}</td>
+            <td>${fmtDate(w.last_seen_at)}</td>
+            <td>${w.active ? `<button class="danger" data-revoke="${escapeHtml(w.id)}">Révoquer</button>` : ""}</td>
+          </tr>`
+        )
+        .join("")}
+    </tbody></table>`;
+    el.querySelectorAll("[data-revoke]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!confirm("Révoquer ce worker ? Il ne pourra plus s'authentifier.")) return;
+        try {
+          await apiFetch(`/api/admin/workers/${btn.dataset.revoke}/revoke`, { method: "POST" });
+          loadWorkers();
+        } catch (e) {
+          alert("Erreur : " + e.message);
+        }
+      });
+    });
+  } catch (e) {
+    el.innerHTML = `<div class="empty">Erreur : ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ---------- Utilisateurs ----------
+
+async function loadUsers() {
+  const el = document.getElementById("users-list");
+  el.innerHTML = '<div class="empty">Chargement...</div>';
+  try {
+    const { users } = await apiFetch("/api/admin/users");
+    if (users.length === 0) {
+      el.innerHTML = '<div class="empty">Aucun collaborateur pour le moment.</div>';
+      return;
+    }
+    const agencyName = (id) => (id ? agenciesCache.find((a) => a.id === id)?.name || "—" : "Toutes");
+    el.innerHTML = `<table><thead><tr><th>Email</th><th>Rôle</th><th>Agence</th><th>Compte activé</th><th>Créé le</th></tr></thead><tbody>
+      ${users
+        .map(
+          (u) => `<tr>
+            <td>${escapeHtml(u.email)}</td>
+            <td>${escapeHtml(u.role)}</td>
+            <td>${escapeHtml(agencyName(u.agency_id))}</td>
+            <td>${u.linked ? "Oui" : "En attente"}</td>
+            <td>${fmtDate(u.created_at)}</td>
+          </tr>`
+        )
+        .join("")}
+    </tbody></table>`;
+  } catch (e) {
+    el.innerHTML = `<div class="empty">Erreur : ${escapeHtml(e.message)}</div>`;
+  }
+}
 
 init();

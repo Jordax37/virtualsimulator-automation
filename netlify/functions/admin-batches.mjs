@@ -68,12 +68,25 @@ async function handleCreate(pool, user, req) {
   }
   const vehiculeUs = !!body.vehicule_us;
 
+  // batches.agency_id est NOT NULL, mais un administrateur n'a lui-même
+  // aucune agence (voir agencyScopeFor) -- il doit donc en choisir une
+  // explicitement. manager/commercial restent forcés sur LEUR agence,
+  // jamais une valeur du client (même s'ils en envoient une autre).
+  const targetAgencyId = user.role === "administrateur" ? body.agency_id : user.agencyId;
+  if (!targetAgencyId) {
+    return new Response(JSON.stringify({ error: "agency_id requis" }), { status: 400, headers: { "Content-Type": "application/json" } });
+  }
+  const agencyRows = await pool.query("SELECT id FROM agencies WHERE id = $1 AND active = true", [targetAgencyId]);
+  if (!agencyRows.rows[0]) {
+    return new Response(JSON.stringify({ error: "Agence inconnue ou inactive" }), { status: 400, headers: { "Content-Type": "application/json" } });
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const batchResult = await client.query(
       "INSERT INTO batches (created_by, agency_id, margin, vehicule_us) VALUES ($1, $2, $3, $4) RETURNING id, created_by, agency_id, margin, vehicule_us, created_at",
-      [user.id, user.agencyId, margin, vehiculeUs]
+      [user.id, targetAgencyId, margin, vehiculeUs]
     );
     const batch = batchResult.rows[0];
 

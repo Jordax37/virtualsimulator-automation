@@ -33,7 +33,7 @@ async function handleCreate(sql, user, req) {
   }
   const email = String(body.email || "").trim().toLowerCase();
   const role = body.role;
-  const agencyId = body.agency_id;
+  const agencyId = body.agency_id || null;
 
   if (!email || !email.includes("@")) {
     return new Response(JSON.stringify({ error: "Email invalide" }), { status: 400, headers: { "Content-Type": "application/json" } });
@@ -41,16 +41,21 @@ async function handleCreate(sql, user, req) {
   if (!VALID_ROLES.includes(role)) {
     return new Response(JSON.stringify({ error: "Rôle invalide" }), { status: 400, headers: { "Content-Type": "application/json" } });
   }
-  if (!agencyId) {
+  // Un administrateur n'est rattaché à aucune agence en particulier (voir
+  // agencyScopeFor) -- agency_id n'est donc obligatoire que pour
+  // manager/commercial, jamais pour créer un compte administrateur.
+  if (!agencyId && role !== "administrateur") {
     return new Response(JSON.stringify({ error: "agency_id requis" }), { status: 400, headers: { "Content-Type": "application/json" } });
   }
   if (!canAssignRoleAndAgency(user, role, agencyId)) {
     return forbiddenResponse("Vous ne pouvez pas attribuer ce rôle ou cette agence");
   }
 
-  const agencyRows = await sql`SELECT id FROM agencies WHERE id = ${agencyId} AND active = true`;
-  if (!agencyRows[0]) {
-    return new Response(JSON.stringify({ error: "Agence inconnue ou inactive" }), { status: 400, headers: { "Content-Type": "application/json" } });
+  if (agencyId) {
+    const agencyRows = await sql`SELECT id FROM agencies WHERE id = ${agencyId} AND active = true`;
+    if (!agencyRows[0]) {
+      return new Response(JSON.stringify({ error: "Agence inconnue ou inactive" }), { status: 400, headers: { "Content-Type": "application/json" } });
+    }
   }
 
   try {
