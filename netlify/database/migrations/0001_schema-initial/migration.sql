@@ -101,7 +101,15 @@ CREATE TABLE IF NOT EXISTS vehicle_jobs (
   lease_expires_at TIMESTAMPTZ, -- au-delà, le job redevient réclamable même si status='running'
   heartbeat_at TIMESTAMPTZ,
 
+  -- retry_count = nombre de NOUVELLES tentatives déjà effectuées après
+  -- l'échec initial (0 au départ ; passe à 1 après le premier échec
+  -- retryable, etc.). MAX_RETRIES=3 -> tentative initiale + 3 retries avant
+  -- passage définitif en 'failed'.
   retry_count INTEGER NOT NULL DEFAULT 0,
+  -- Backoff avant qu'un job 'retrying' ne redevienne réellement 'queued' --
+  -- évite qu'une erreur répétitive ne boucle instantanément (claim/fail en
+  -- rafale). NULL sauf pendant la fenêtre de backoff d'un statut 'retrying'.
+  next_retry_at TIMESTAMPTZ,
 
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   started_at TIMESTAMPTZ,
@@ -121,6 +129,9 @@ CREATE INDEX IF NOT EXISTS idx_vehicle_jobs_claimable ON vehicle_jobs(status, cr
 -- jobs 'claimed'/'running' (NULL sinon), sert le job de récupération des
 -- baux expirés.
 CREATE INDEX IF NOT EXISTS idx_vehicle_jobs_lease ON vehicle_jobs(lease_expires_at) WHERE status IN ('claimed', 'running');
+-- Index partiel pour la fonction de reprise des retries en attente
+-- (retrying -> queued une fois next_retry_at dépassé).
+CREATE INDEX IF NOT EXISTS idx_vehicle_jobs_next_retry ON vehicle_jobs(next_retry_at) WHERE status = 'retrying';
 
 -- ---------------------------------------------------------------------
 -- job_events (journal de progression, équivalent persistant du log actuel

@@ -36,6 +36,23 @@ export default async (req, context) => {
 
   if (step) await sql`UPDATE vehicle_jobs SET current_step = ${step} WHERE id = ${id}`;
 
+  // Dédoublonnage léger (pas une usine à gaz) : un retry réseau renvoyant
+  // EXACTEMENT le même évènement juste après ne crée pas un doublon évident
+  // -- compare seulement au tout dernier évènement du job.
+  const last = await sql`
+    SELECT step, message, progress_current, progress_total FROM job_events
+    WHERE vehicle_job_id = ${id} ORDER BY "timestamp" DESC LIMIT 1
+  `;
+  const isDuplicate =
+    last[0] &&
+    last[0].step === (step || null) &&
+    last[0].message === message &&
+    last[0].progress_current === (progress_current ?? null) &&
+    last[0].progress_total === (progress_total ?? null);
+  if (isDuplicate) {
+    return new Response(JSON.stringify({ event: null, deduplicated: true }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }
+
   const event = await sql`
     INSERT INTO job_events (vehicle_job_id, level, step, message, progress_current, progress_total)
     VALUES (${id}, ${finalLevel}, ${step || null}, ${message}, ${progress_current ?? null}, ${progress_total ?? null})

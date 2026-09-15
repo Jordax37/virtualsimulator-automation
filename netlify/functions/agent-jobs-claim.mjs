@@ -3,7 +3,9 @@
 // authentifié (jamais un agency_id envoyé par le client) et aux workers
 // actifs. FOR UPDATE SKIP LOCKED dans une seule instruction UPDATE (pas un
 // SELECT puis un UPDATE séparés) -- voir la validation déjà faite sur cette
-// requête précise.
+// requête précise. Ne sélectionne QUE status='queued' -- ne récupère donc
+// jamais un job 'retrying' (en attente de son backoff, voir
+// scheduled-lease-recovery.mjs qui le repasse en 'queued' une fois échu).
 //
 // ⚠️ PARTIELLEMENT TESTÉ -- la requête SQL de claim est testée directement
 // (voir échanges précédents) ; ce fichier lui-même (authenticateWorker +

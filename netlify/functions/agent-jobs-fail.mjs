@@ -1,15 +1,17 @@
-// POST /api/agent/jobs/:id/fail -- running -> retrying -> queued (si
-// retryable et sous le seuil de tentatives) OU running -> failed (sinon).
-// Le SERVEUR décide seul, jamais l'extension : retryable=true dans le corps
-// n'est qu'une indication, pas une garantie de nouvelle tentative.
+// POST /api/agent/jobs/:id/fail -- running -> retrying (avec backoff via
+// next_retry_at, jamais requeued immédiatement) OU running -> failed. Le
+// SERVEUR décide seul via retry_count, jamais l'extension : retryable=true
+// dans le corps n'est qu'une indication.
+//
+// La transition retrying -> queued n'a JAMAIS lieu ici : elle est faite par
+// la fonction planifiée de reprise (lease-recovery), une fois next_retry_at
+// dépassé -- évite qu'une erreur répétitive ne boucle instantanément
+// (claim/fail/queued/claim/fail... en rafale).
 
 import { getDatabase } from "@netlify/database";
 import { authenticateWorker, unauthorizedResponse } from "./lib/worker-auth.mjs";
 import { canTransition, invalidTransitionResponse } from "./lib/job-transitions.mjs";
-
-// Nombre maximum de tentatives avant échec définitif -- ajustable selon
-// l'expérience réelle, pas de valeur imposée par la spec initiale.
-const MAX_RETRIES = 3;
+import { MAX_RETRIES, backoffMinutesFor } from "./lib/retry-backoff.mjs";
 
 export default async (req, context) => {
   if (req.method !== "POST") {
@@ -42,18 +44,19 @@ export default async (req, context) => {
   if (!canTransition(job.status, nextStatus)) return invalidTransitionResponse(job.status, nextStatus);
 
   let updated;
+  let backoffMinutes;
   if (willRetry) {
-    // running -> retrying -> queued, dans la même requête : "retrying" est
-    // un état réel (visible dans l'historique via l'évènement ci-dessous)
-    // mais ne reste jamais bloqué en base -- le job redevient immédiatement
-    // réclamable par n'importe quel worker de la même agence.
-    if (!canTransition("retrying", "queued")) throw new Error("transition retrying -> queued mal configurée");
+    const nextRetryNumber = job.retry_count + 1;
+    backoffMinutes = backoffMinutesFor(nextRetryNumber);
+    // Le job quitte le worker (worker_id NULL) : un autre poste de la même
+    // agence pourra le reprendre une fois next_retry_at dépassé, pas
+    // nécessairement celui qui a échoué.
     updated = await sql`
       UPDATE vehicle_jobs
-      SET status = 'queued', worker_id = NULL, claimed_at = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
-          retry_count = retry_count + 1
+      SET status = 'retrying', worker_id = NULL, claimed_at = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
+          retry_count = ${nextRetryNumber}, next_retry_at = now() + make_interval(mins => ${backoffMinutes})
       WHERE id = ${id} AND worker_id = ${worker.id} AND status = ${job.status}
-      RETURNING id, status, retry_count
+      RETURNING id, status, retry_count, next_retry_at
     `;
   } else {
     updated = await sql`
@@ -64,10 +67,10 @@ export default async (req, context) => {
   }
   if (!updated[0]) return invalidTransitionResponse(job.status, nextStatus);
 
-  await sql`
-    INSERT INTO job_events (vehicle_job_id, level, step, message)
-    VALUES (${id}, 'error', ${step || null}, ${message + (willRetry ? ` (nouvelle tentative ${job.retry_count + 1}/${MAX_RETRIES})` : " (échec définitif)")})
-  `;
+  const eventMessage = willRetry
+    ? `${message} (nouvelle tentative ${job.retry_count + 1}/${MAX_RETRIES} programmée dans ${backoffMinutes} min)`
+    : `${message} (échec définitif après ${job.retry_count} tentative(s))`;
+  await sql`INSERT INTO job_events (vehicle_job_id, level, step, message) VALUES (${id}, 'error', ${step || null}, ${eventMessage})`;
 
   return new Response(JSON.stringify({ vehicle_job: updated[0], retried: willRetry }), {
     status: 200,

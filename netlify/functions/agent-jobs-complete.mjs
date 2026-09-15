@@ -1,6 +1,9 @@
 // POST /api/agent/jobs/:id/complete -- running -> completed. Écrit/met à
 // jour job_results (upsert : un job ne peut avoir qu'un seul résultat,
-// contrainte UNIQUE sur vehicle_job_id).
+// contrainte UNIQUE sur vehicle_job_id). Idempotent : un /complete rappelé
+// par le MÊME worker sur un job déjà 'completed' ne recrée jamais un second
+// résultat ni ne recompte -- il met juste à jour le résultat existant
+// (ON CONFLICT) et renvoie un succès stable, sans toucher completed_at.
 
 import { getDatabase } from "@netlify/database";
 import { authenticateWorker, unauthorizedResponse } from "./lib/worker-auth.mjs";
@@ -29,17 +32,28 @@ export default async (req, context) => {
   const zohoStatus = VALID_SUBSTATUS.includes(body.zoho_status) ? body.zoho_status : null;
 
   const { id } = context.params;
-  const rows = await sql`SELECT id, status FROM vehicle_jobs WHERE id = ${id} AND worker_id = ${worker.id}`;
+  const rows = await sql`SELECT id, status, completed_at FROM vehicle_jobs WHERE id = ${id} AND worker_id = ${worker.id}`;
   const job = rows[0];
   if (!job) return new Response(JSON.stringify({ error: "Job introuvable ou non détenu par ce worker" }), { status: 404, headers: { "Content-Type": "application/json" } });
-  if (!canTransition(job.status, "completed")) return invalidTransitionResponse(job.status, "completed");
 
-  const updated = await sql`
-    UPDATE vehicle_jobs SET status = 'completed', completed_at = now()
-    WHERE id = ${id} AND worker_id = ${worker.id} AND status = ${job.status}
-    RETURNING id, status, completed_at
-  `;
-  if (!updated[0]) return invalidTransitionResponse(job.status, "completed");
+  // Idempotence : déjà completed par CE worker (retry réseau) -- ne refait
+  // pas la transition (completed_at inchangé), mais laisse tout de même
+  // l'upsert job_results ci-dessous rejouer sans dupliquer.
+  const alreadyCompleted = job.status === "completed";
+  if (!alreadyCompleted && !canTransition(job.status, "completed")) return invalidTransitionResponse(job.status, "completed");
+
+  let jobResponse;
+  if (alreadyCompleted) {
+    jobResponse = { id: job.id, status: job.status, completed_at: job.completed_at };
+  } else {
+    const updated = await sql`
+      UPDATE vehicle_jobs SET status = 'completed', completed_at = now()
+      WHERE id = ${id} AND worker_id = ${worker.id} AND status = ${job.status}
+      RETURNING id, status, completed_at
+    `;
+    if (!updated[0]) return invalidTransitionResponse(job.status, "completed");
+    jobResponse = updated[0];
+  }
 
   const result = await sql`
     INSERT INTO job_results (vehicle_job_id, vehicle_data, iziscar_status, pdf_status, zoho_status, result_data)
@@ -53,7 +67,7 @@ export default async (req, context) => {
     RETURNING id
   `;
 
-  return new Response(JSON.stringify({ vehicle_job: updated[0], job_result_id: result[0].id }), {
+  return new Response(JSON.stringify({ vehicle_job: jobResponse, job_result_id: result[0].id }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
