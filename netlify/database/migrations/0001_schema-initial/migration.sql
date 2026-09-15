@@ -86,7 +86,11 @@ CREATE TABLE IF NOT EXISTS vehicle_jobs (
   -- Réservation atomique par un worker (voir claim en base : UPDATE ... WHERE
   -- status='queued' ... FOR UPDATE SKIP LOCKED, jamais un simple SELECT+UPDATE
   -- séparés qui laisserait une fenêtre de course entre deux postes).
-  worker_id UUID REFERENCES workers(id) ON DELETE SET NULL,
+  -- RESTRICT (pas SET NULL) : traçabilité définitive du PC ayant traité
+  -- chaque véhicule -- un worker ne se supprime jamais physiquement, il se
+  -- désactive (active=false), donc cette contrainte ne devrait jamais bloquer
+  -- d'usage normal, seulement empêcher une suppression accidentelle.
+  worker_id UUID REFERENCES workers(id) ON DELETE RESTRICT,
   claimed_at TIMESTAMPTZ,
   lease_expires_at TIMESTAMPTZ, -- au-delà, le job redevient réclamable même si status='running'
   heartbeat_at TIMESTAMPTZ,
