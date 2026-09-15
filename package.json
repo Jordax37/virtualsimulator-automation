@@ -1,0 +1,13 @@
+{
+  "name": "virtualsimulator",
+  "version": "1.0.0",
+  "description": "Virtual Import Multi-Pays -- simulateur + espace admin/automatisation",
+  "private": true,
+  "scripts": {
+    "dev": "netlify dev"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@netlify/database": "^2.0.1"
+  }
+}
