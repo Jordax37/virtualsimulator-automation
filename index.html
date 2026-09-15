@@ -30,10 +30,9 @@ body::after{width:680px;height:680px;background:var(--accent-b);opacity:0.2;bott
 .app{position:relative;z-index:1;background:var(--surface);border-radius:20px;border:0.5px solid var(--line);width:100%;max-width:860px;box-shadow:0 1px 2px rgba(0,0,0,0.3),0 32px 64px -24px rgba(0,0,0,0.65);overflow:hidden;}
 .app-header{padding:1.1rem 1.5rem;border-bottom:0.5px solid var(--line);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
 .logo{display:flex;align-items:center;gap:12px;}
+.brand-logo-img{height:40px;width:auto;border-radius:6px;display:block;}
 .brand-mark{animation:markGlow 4s ease-in-out infinite;}
 @keyframes markGlow{0%,100%{filter:drop-shadow(0 0 3px rgba(139,92,246,0.35));}50%{filter:drop-shadow(0 0 10px rgba(139,92,246,0.7));}}
-.brand{font-size:15px;font-weight:500;letter-spacing:0.2em;color:var(--ink);text-transform:uppercase;}
-.sub{font-size:10px;color:var(--ink-faint);letter-spacing:0.1em;text-transform:uppercase;margin-top:2px;}
 .rate-bar{display:flex;align-items:center;gap:8px;font-size:12px;flex-wrap:wrap;}
 .rate-val{font-weight:500;color:var(--accent-text);font-size:11px;}
 .rate-lbl{color:var(--ink-faint);font-size:11px;}
@@ -548,12 +547,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
 <div class="app">
   <div class="app-header">
     <div class="logo">
-      <svg width="28" height="28" viewBox="0 0 32 32" fill="none" class="brand-mark">
-        <defs><linearGradient id="lg" x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#4a72f5"/><stop offset="100%" stop-color="#9b3fe8"/></linearGradient></defs>
-        <polyline points="2,4 16,28 30,4" fill="none" stroke="url(#lg)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-        <polyline points="7,4 16,20 25,4" fill="none" stroke="url(#lg)" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="0.4"/>
-      </svg>
-      <div><div class="brand">Virtual</div><div class="sub">Import Multi-Pays</div></div>
+      <img src="/assets/logo-virtual-orleans.jpg" alt="Virtual Orléans" class="brand-mark brand-logo-img" />
     </div>
     <div class="rate-bar">
       <span class="rate-lbl">Taux live :</span>
