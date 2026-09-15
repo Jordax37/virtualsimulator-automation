@@ -4,11 +4,15 @@
   "description": "Virtual Import Multi-Pays -- simulateur + espace admin/automatisation",
   "private": true,
   "scripts": {
-    "dev": "netlify dev"
+    "dev": "netlify dev",
+    "build:admin": "node esbuild.admin.mjs"
   },
   "license": "UNLICENSED",
   "dependencies": {
     "@netlify/database": "^2.0.1",
     "@netlify/identity": "^2.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
   }
 }

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Connexion — Virtual Admin</title>
+<title>Finaliser le compte — Virtual Admin</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -21,10 +21,9 @@
     border: 1px solid #e5e9eb;
     border-radius: 10px;
     padding: 32px;
-    width: 320px;
+    width: 340px;
   }
-  h1 { font-size: 18px; margin: 0 0 6px; text-align: center; }
-  p.sub { font-size: 12.5px; color: #667; margin: 0 0 22px; text-align: center; }
+  h1 { font-size: 16px; margin: 0 0 18px; text-align: center; }
   label { font-size: 11.5px; color: #445; display: block; margin: 0 0 4px; }
   input {
     width: 100%; padding: 9px 10px; border: 1px solid #d5dde0; border-radius: 6px;
@@ -34,24 +33,25 @@
     width: 100%; padding: 11px; background: #7a3fe0; color: white; border: none;
     border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
   }
-  button:disabled { background: #c6afef; cursor: default; }
-  #status { margin-top: 14px; font-size: 11.5px; color: #9c2b2b; min-height: 16px; text-align: center; }
+  #status { margin-top: 12px; font-size: 11.5px; color: #9c2b2b; min-height: 16px; text-align: center; }
+  #message-section { text-align: center; font-size: 13px; color: #445; }
+  #message-section.error { color: #9c2b2b; }
 </style>
 </head>
 <body>
   <div class="card">
-    <h1>Virtual — Espace admin</h1>
-    <p class="sub">Connexion réservée au personnel Virtual.</p>
-    <form id="login-form">
-      <label for="email">Email</label>
-      <input type="email" id="email" autocomplete="username" required />
-      <label for="password">Mot de passe</label>
-      <input type="password" id="password" autocomplete="current-password" required />
-      <button type="submit" id="btn-login">Se connecter</button>
-    </form>
-    <div id="status"></div>
+    <div id="message-section">Traitement du lien en cours...</div>
+    <div id="password-form-section" hidden>
+      <h1 id="form-title">Choisissez votre mot de passe</h1>
+      <form id="password-form">
+        <label for="new-password">Nouveau mot de passe</label>
+        <input type="password" id="new-password" autocomplete="new-password" required minlength="8" />
+        <button type="submit">Valider</button>
+      </form>
+      <div id="status"></div>
+    </div>
   </div>
 
-  <script type="module" src="login.js"></script>
+  <script type="module" src="callback.js"></script>
 </body>
 </html>

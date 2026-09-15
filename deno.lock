@@ -12,7 +12,8 @@
     "packageJson": {
       "dependencies": [
         "npm:@netlify/database@^2.0.1",
-        "npm:@netlify/identity@2"
+        "npm:@netlify/identity@2",
+        "npm:esbuild@~0.28.2"
       ]
     }
   }
