@@ -1,6 +1,15 @@
 export default async (request, context) => {
-  const user = Netlify.env.get("BASIC_AUTH_USER") || "virtual";
-  const pass = Netlify.env.get("BASIC_AUTH_PASS") || "courtier";
+  const user = Netlify.env.get("BASIC_AUTH_USER");
+  const pass = Netlify.env.get("BASIC_AUTH_PASS");
+
+  // Aucun fallback codé en dur : si l'une des deux variables n'est pas
+  // configurée côté Netlify, l'accès est refusé plutôt que de retomber sur
+  // un couple identifiant/mot de passe par défaut connu de quiconque lit ce
+  // fichier (voir correction demandée avant mise en production).
+  if (!user || !pass) {
+    return new Response("Authentification non configurée.", { status: 401 });
+  }
+
   const expected = "Basic " + btoa(`${user}:${pass}`);
 
   const auth = request.headers.get("authorization");
