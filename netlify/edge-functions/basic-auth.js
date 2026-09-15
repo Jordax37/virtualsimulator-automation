@@ -16,10 +16,15 @@ export default async (request, context) => {
   return context.next();
 };
 
-// Exclut les routes API : les agents locaux (extension Chrome) s'authentifient
-// par leur propre token (Bearer), jamais par ce mot de passe partagé destiné
-// aux humains -- sans cette exclusion, le token agent ne suffit jamais à
-// passer ce mur, avant même d'atteindre la fonction qui le vérifie
-// (vérifié en conditions réelles : "Authentification requise." renvoyé par
-// cet edge function AVANT que agent-whoami ne s'exécute).
-export const config = { path: "/*", excludedPath: ["/api/*", "/.netlify/functions/*"] };
+// Seul /api/agent/* est exclu -- les agents locaux (extension Chrome)
+// s'authentifient par leur propre token (Bearer), jamais par ce mot de passe
+// partagé destiné aux humains (sans cette exclusion, le token agent ne
+// suffit jamais à passer ce mur, avant même d'atteindre la fonction qui le
+// vérifie -- vérifié en conditions réelles).
+// /api/admin/* reste volontairement DERRIÈRE ce mur pour l'instant (double
+// protection temporaire pendant la migration, voir le point dédié) --
+// ERREUR CORRIGÉE ICI : une première version excluait "/api/*" en bloc, ce
+// qui laissait /api/admin/* passer sans mot de passe partagé ; constaté en
+// testant explicitement ce cas précis (content-type json de ma propre
+// fonction au lieu du texte brut de cet edge function).
+export const config = { path: "/*", excludedPath: ["/api/agent/*"] };

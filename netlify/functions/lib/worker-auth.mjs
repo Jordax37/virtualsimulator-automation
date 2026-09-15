@@ -26,19 +26,23 @@ function extractBearerToken(authorizationHeader) {
 }
 
 // Authentifie un agent à partir de l'en-tête Authorization d'une requête.
-// Retourne le worker (id, name, agency_id) si le token est valide ET que le
-// worker est actif, sinon null -- jamais d'exception, à l'appelant de
-// répondre 401 si null. Ne fait JAMAIS confiance à un agency_id envoyé par
-// le client : l'agence du worker est TOUJOURS déduite du token côté serveur.
+// Le token n'est JAMAIS accepté ailleurs (query string, corps de requête) --
+// uniquement via ce header, jamais journalisé (aucun `console.log` du token
+// ou du header brut nulle part dans ce module ou ses appelants).
+// Retourne le worker si le token est valide ET actif, sinon null -- jamais
+// d'exception, à l'appelant de répondre 401 si null. Ne fait JAMAIS confiance
+// à un agency_id envoyé par le client : l'agence du worker est TOUJOURS
+// déduite du token côté serveur, via cette seule fonction.
 export async function authenticateWorker(sql, authorizationHeader) {
   const token = extractBearerToken(authorizationHeader);
   if (!token) return null;
 
   const tokenHash = hashToken(token);
   const rows = await sql`
-    SELECT id, name, agency_id, active
-    FROM workers
-    WHERE token_hash = ${tokenHash}
+    SELECT w.id, w.name, w.agency_id, w.active, w.version, a.code AS agency_code
+    FROM workers w
+    JOIN agencies a ON a.id = w.agency_id
+    WHERE w.token_hash = ${tokenHash}
   `;
   const worker = rows[0];
   if (!worker || !worker.active) return null;
@@ -55,7 +59,14 @@ export async function authenticateWorker(sql, authorizationHeader) {
     // non bloquant
   }
 
-  return { id: worker.id, name: worker.name, agencyId: worker.agency_id };
+  return {
+    id: worker.id,
+    name: worker.name,
+    agencyId: worker.agency_id,
+    agencyCode: worker.agency_code,
+    active: worker.active,
+    version: worker.version,
+  };
 }
 
 // Réponse 401 standard, réutilisée par toutes les fonctions protégées par

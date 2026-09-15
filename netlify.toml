@@ -3,12 +3,17 @@
 
 [[edge_functions]]
   path = "/*"
-  excludedPath = ["/api/*", "/.netlify/functions/*"]
+  # Seul /api/agent/* est exclu -- les agents (extension) s'authentifient par
+  # leur propre token, incompatible avec le mot de passe partagé humain.
+  # /api/admin/* reste volontairement DERRIÈRE ce mot de passe pour l'instant
+  # (double protection temporaire pendant la migration -- voir point 7),
+  # en plus de son propre contrôle Netlify Identity/rôle. Ne JAMAIS élargir
+  # cette exclusion à "/api/*" en bloc : chaque route doit garder sa propre
+  # authentification applicative, l'exclusion du Basic Auth n'en tient pas lieu.
+  excludedPath = ["/api/agent/*"]
   function = "basic-auth"
 
-# URLs propres pour les fonctions (ex: /api/agent-whoami) plutôt que le
-# chemin brut /.netlify/functions/agent-whoami.
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
+# Chaque fonction déclare son propre chemin final via `export const config
+# = { path: "/api/agent/..." }` -- pas de redirection générique /api/* ici,
+# pour ne jamais mélanger par erreur les routes agent et admin sous un même
+# préfixe non distingué.

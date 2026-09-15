@@ -23,7 +23,13 @@ CREATE TABLE IF NOT EXISTS agencies (
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  identity_id TEXT NOT NULL UNIQUE, -- id utilisateur Netlify Identity
+  -- NULL tant que la personne ne s'est jamais connectée : un administrateur
+  -- pré-provisionne la ligne (email + rôle + agence) AVANT que l'utilisateur
+  -- n'existe côté Netlify Identity ; identity_id est rempli à la toute
+  -- première connexion réussie, par correspondance sur l'email -- jamais de
+  -- création automatique de ligne à la connexion (pas d'auto-attribution de
+  -- rôle : voir la synchronisation dans lib/user-auth.mjs).
+  identity_id TEXT UNIQUE,
   email TEXT NOT NULL UNIQUE,
   role TEXT NOT NULL CHECK (role IN ('administrateur', 'manager', 'commercial')),
   agency_id UUID REFERENCES agencies(id) ON DELETE SET NULL,

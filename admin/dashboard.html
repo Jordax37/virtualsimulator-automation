@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dashboard — Virtual Admin</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #f7f9fa;
+    color: #1a2b3c;
+    margin: 0;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; background: white; border-bottom: 1px solid #e5e9eb;
+  }
+  header h1 { font-size: 16px; margin: 0; }
+  #user-badge { font-size: 12px; color: #445; text-align: right; }
+  #user-badge .role { display: inline-block; margin-top: 2px; padding: 2px 8px; background: #f3edfd; color: #5a2fb0; border-radius: 10px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; }
+  button.logout {
+    margin-left: 14px; padding: 6px 12px; background: white; color: #9c2b2b;
+    border: 1px solid #e5c6c6; border-radius: 6px; font-size: 11.5px; cursor: pointer;
+  }
+  main { padding: 24px; max-width: 900px; margin: 0 auto; }
+  .placeholder {
+    background: white; border: 1px dashed #d5dde0; border-radius: 10px;
+    padding: 40px; text-align: center; color: #889; font-size: 13px;
+  }
+  #status { padding: 12px 24px; font-size: 12px; }
+  #status.error { color: #9c2b2b; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Virtual — Dashboard</h1>
+    <div style="display:flex; align-items:center;">
+      <div id="user-badge">Chargement...</div>
+      <button class="logout" id="btn-logout">Déconnexion</button>
+    </div>
+  </header>
+
+  <div id="status"></div>
+
+  <main>
+    <div class="placeholder">
+      Dashboard minimal — étape 2.<br />
+      La création de traitements, le suivi des véhicules et les logs arriveront à l'étape API (batches/vehicle_jobs).
+    </div>
+  </main>
+
+  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+  <script>
+    // ⚠️ PARTIELLEMENT TESTÉ : voir la même remarque que login.html --
+    // chargement du widget vérifié en local, flux de connexion réel NON
+    // TESTÉ (nécessite Identity activé en production).
+    if (typeof netlifyIdentity === "undefined") {
+      document.getElementById("status").className = "error";
+      document.getElementById("status").textContent =
+        "Le service de connexion n'a pas pu se charger. Réessayez ou contactez un administrateur.";
+    } else {
+      // Pattern recommandé par Netlify : attendre "init" plutôt que
+      // d'appeler currentUser() juste après init() de façon synchrone.
+      netlifyIdentity.on("init", (user) => {
+        if (!user) {
+          // Redirection CÔTÉ CLIENT uniquement (confort/UX) -- si quelqu'un
+          // contourne ce script, chaque appel /api/admin/* reste protégé
+          // indépendamment côté serveur (voir lib/user-auth.mjs).
+          window.location.href = "/admin/login.html";
+        } else {
+          loadUserInfo(user);
+        }
+      });
+
+      netlifyIdentity.on("logout", () => {
+        window.location.href = "/admin/login.html";
+      });
+
+      netlifyIdentity.init();
+
+      document.getElementById("btn-logout").addEventListener("click", () => {
+        netlifyIdentity.logout();
+      });
+    }
+
+    async function loadUserInfo(user) {
+      const statusEl = document.getElementById("status");
+      const badgeEl = document.getElementById("user-badge");
+      try {
+        // Le rôle affiché ici vient de la réponse serveur (/api/admin/whoami),
+        // jamais d'une donnée décidée par ce script -- l'affichage suit la
+        // vérité côté serveur, il ne la remplace pas.
+        const token = user.token && user.token.access_token;
+        const res = await fetch("/api/admin/whoami", {
+          headers: token ? { Authorization: "Bearer " + token } : {},
+        });
+        if (res.status === 401) {
+          window.location.href = "/admin/login.html";
+          return;
+        }
+        if (res.status === 403) {
+          statusEl.className = "error";
+          statusEl.textContent = "Compte non autorisé sur cet espace. Contactez un administrateur.";
+          badgeEl.textContent = user.email;
+          return;
+        }
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+        badgeEl.innerHTML = data.email + '<br><span class="role">' + data.role + "</span>";
+      } catch (e) {
+        statusEl.className = "error";
+        statusEl.textContent = "Impossible de vérifier le compte : " + e.message;
+        badgeEl.textContent = user.email;
+      }
+    }
+  </script>
+</body>
+</html>

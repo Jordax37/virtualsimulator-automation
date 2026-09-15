@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Connexion — Virtual Admin</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #f7f9fa;
+    color: #1a2b3c;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+  }
+  .card {
+    background: white;
+    border: 1px solid #e5e9eb;
+    border-radius: 10px;
+    padding: 32px;
+    width: 320px;
+    text-align: center;
+  }
+  h1 { font-size: 18px; margin: 0 0 6px; }
+  p.sub { font-size: 12.5px; color: #667; margin: 0 0 24px; }
+  button {
+    width: 100%; padding: 11px; background: #7a3fe0; color: white; border: none;
+    border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  button:disabled { background: #c6afef; cursor: default; }
+  #status { margin-top: 14px; font-size: 11.5px; color: #9c2b2b; min-height: 16px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Virtual — Espace admin</h1>
+    <p class="sub">Connexion réservée au personnel Virtual.</p>
+    <button id="btn-login">Se connecter</button>
+    <div id="status"></div>
+  </div>
+
+  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+  <script>
+    // ⚠️ PARTIELLEMENT TESTÉ : le widget se charge bien et netlifyIdentity.open()
+    // ouvre réellement une modale (vérifié en local -- sur localhost, la
+    // modale "Development Settings" de Netlify apparaît, comportement normal
+    // et documenté tant qu'aucune URL de site Identity n'est renseignée).
+    // NON TESTÉ : le flux de connexion réel lui-même, qui nécessite Identity
+    // activé en production.
+    if (typeof netlifyIdentity === "undefined") {
+      document.getElementById("status").textContent =
+        "Le service de connexion n'a pas pu se charger. Réessayez ou contactez un administrateur.";
+      document.getElementById("btn-login").disabled = true;
+    } else {
+      // Pattern recommandé par Netlify : attendre l'évènement "init" plutôt
+      // que d'appeler currentUser() juste après init() de façon synchrone.
+      netlifyIdentity.on("init", (existingUser) => {
+        // Déjà connecté -> inutile de repasser par cette page. Redirection
+        // CÔTÉ CLIENT uniquement (confort) -- la vraie protection est le
+        // contrôle de rôle côté serveur sur chaque appel /api/admin/*.
+        if (existingUser) window.location.href = "/admin/dashboard.html";
+      });
+
+      netlifyIdentity.on("login", () => {
+        window.location.href = "/admin/dashboard.html";
+      });
+
+      netlifyIdentity.init();
+
+      document.getElementById("btn-login").addEventListener("click", () => {
+        netlifyIdentity.open("login");
+      });
+
+      netlifyIdentity.on("error", (err) => {
+        document.getElementById("status").textContent = "Erreur de connexion : " + (err && err.message ? err.message : "inconnue");
+      });
+    }
+  </script>
+</body>
+</html>
