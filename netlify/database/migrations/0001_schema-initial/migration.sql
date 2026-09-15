@@ -100,10 +100,16 @@ CREATE TABLE IF NOT EXISTS vehicle_jobs (
 
 CREATE INDEX IF NOT EXISTS idx_vehicle_jobs_batch ON vehicle_jobs(batch_id);
 CREATE INDEX IF NOT EXISTS idx_vehicle_jobs_worker ON vehicle_jobs(worker_id);
--- Index dédié à la requête de claim (jobs disponibles, triés par ancienneté)
--- et à la détection des baux expirés (jobs 'running'/'claimed' dont le heartbeat
--- est trop vieux -- redeviennent disponibles ou passent en erreur récupérable).
+-- Index général (status, created_at) -- sert le dashboard pour tout filtrage
+-- par statut (ex: lister les 'action_required' ou 'failed', triés par date).
+CREATE INDEX IF NOT EXISTS idx_vehicle_jobs_status_created ON vehicle_jobs(status, created_at);
+-- Index partiel supplémentaire, plus étroit, dédié spécifiquement à la
+-- requête de claim (ne porte que sur les lignes 'queued' -- plus petit et
+-- plus rapide que l'index général ci-dessus pour ce cas précis).
 CREATE INDEX IF NOT EXISTS idx_vehicle_jobs_claimable ON vehicle_jobs(status, created_at) WHERE status = 'queued';
+-- Index partiel sur les baux -- lease_expires_at n'est pertinent que pour les
+-- jobs 'claimed'/'running' (NULL sinon), sert le job de récupération des
+-- baux expirés.
 CREATE INDEX IF NOT EXISTS idx_vehicle_jobs_lease ON vehicle_jobs(lease_expires_at) WHERE status IN ('claimed', 'running');
 
 -- ---------------------------------------------------------------------
