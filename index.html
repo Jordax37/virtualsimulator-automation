@@ -591,6 +591,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
       <div class="row"><label>URL de l'annonce</label><input type="text" id="kr-linkurl" placeholder="https://..." style="width:280px"></div>
       <div class="row"><label>Homologation</label><select id="kr-hom-preset" onchange="applyHomPreset('kr');cKR()"><option value="2500">Mercedes &mdash; 2 500 &euro;</option><option value="5500" selected>Classique &mdash; 5 500 &euro;</option><option value="7500">Changement cat&eacute;gorie &mdash; 7 500 &euro;</option><option value="custom">Autre (saisie libre)</option></select></div>
       <div class="row"><label>Montant homologation (&euro;)</label><input type="number" id="kr-hom" value="5500" step="100" oninput="markHomCustom('kr');cKR()"></div>
+      <div class="row"><label style="min-width:unset;cursor:pointer"><input type="checkbox" id="kr-hom-zero" onchange="homZeroToggle('kr')" style="vertical-align:-1px;margin-right:6px;width:auto"> Aucune homologation (0 &euro;)</label></div>
       <div class="row"><label>Estimation carte grise (&euro;)</label><input type="number" id="kr-cg" value="0" step="10" oninput="cKR()"></div>
       <div class="sec">Mandat Virtual</div>
       <div class="row"><label>Montant du mandat (&euro;)</label><input type="number" id="kr-mandat" value="4990" step="100" oninput="cKR()"></div>
@@ -680,6 +681,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
       <div id="us-vm"></div>
       <div class="row"><label>Homologation</label><select id="us-hom-preset" onchange="applyHomPreset('us');cUS()"><option value="5500" selected>Classique &mdash; 5 500 &euro;</option><option value="7500">Changement cat&eacute;gorie &mdash; 7 500 &euro;</option><option value="custom">Autre (saisie libre)</option></select></div>
       <div class="row"><label>Montant homologation (&euro;)</label><input type="number" id="us-hom" value="5500" step="100" oninput="markHomCustom('us');cUS()"></div>
+      <div class="row"><label style="min-width:unset;cursor:pointer"><input type="checkbox" id="us-hom-zero" onchange="homZeroToggle('us')" style="vertical-align:-1px;margin-right:6px;width:auto"> Aucune homologation (0 &euro;)</label></div>
       <div class="row"><label>Estimation carte grise (&euro;)</label><input type="number" id="us-cg" value="0" step="10" oninput="cUS()"></div>
       <div class="sec">Mandat Virtual</div>
       <div class="row"><label>Montant du mandat (&euro;)</label><input type="number" id="us-mandat" value="4990" step="100" oninput="cUS()"></div>
@@ -771,6 +773,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
       <div class="row"><label>Pick-up benne longue ?</label><select id="ca-pu" onchange="cCA()"><option value="no">Non</option><option value="yes">Oui (+700 CAD)</option></select></div>
       <div class="row"><label>Homologation</label><select id="ca-hom-preset" onchange="applyHomPreset('ca');cCA()"><option value="5500" selected>Classique &mdash; 5 500 &euro;</option><option value="7500">Changement cat&eacute;gorie &mdash; 7 500 &euro;</option><option value="custom">Autre (saisie libre)</option></select></div>
       <div class="row"><label>Montant homologation (&euro;)</label><input type="number" id="ca-hom" value="5500" step="100" oninput="markHomCustom('ca');cCA()"></div>
+      <div class="row"><label style="min-width:unset;cursor:pointer"><input type="checkbox" id="ca-hom-zero" onchange="homZeroToggle('ca')" style="vertical-align:-1px;margin-right:6px;width:auto"> Aucune homologation (0 &euro;)</label></div>
       <div class="row"><label>Estimation carte grise (&euro;)</label><input type="number" id="ca-cg" value="0" step="10" oninput="cCA()"></div>
       <div class="sec">Mandat Virtual</div>
       <div class="row"><label>Montant du mandat (&euro;)</label><input type="number" id="ca-mandat" value="4990" step="100" oninput="cCA()"></div>
@@ -871,6 +874,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
       <div class="row"><label>Type de v&eacute;hicule</label><select id="eu-vtype" onchange="cEU()"><option value="us">V&eacute;hicule am&eacute;ricain</option><option value="eu">V&eacute;hicule europ&eacute;en</option></select></div>
       <div class="row"><label>Homologation</label><select id="eu-hom-preset" onchange="applyHomPreset('eu');cEU()"><option value="2500" selected>V&eacute;h. am&eacute;ricain Allemagne &mdash; 2 500 &euro;</option><option value="3500">V&eacute;h. am&eacute;ricain Pologne &mdash; 3 500 &euro;</option><option value="5500">Autre pays europ&eacute;en &mdash; 5 500 &euro;</option><option value="7500">Changement cat&eacute;gorie &mdash; 7 500 &euro;</option><option value="custom">Autre (saisie libre)</option></select></div>
       <div class="row"><label>Montant homologation (&euro;)</label><input type="number" id="eu-hom" value="2500" step="100" oninput="markHomCustom('eu');cEU()"><span class="hint" id="eu-hom-hint"></span></div>
+      <div class="row"><label style="min-width:unset;cursor:pointer"><input type="checkbox" id="eu-hom-zero" onchange="homZeroToggle('eu')" style="vertical-align:-1px;margin-right:6px;width:auto"> Aucune homologation (0 &euro;)</label></div>
       <div class="row"><label>Estimation carte grise (&euro;)</label><input type="number" id="eu-cg" value="0" step="10" oninput="cEU()"></div>
       <div class="sec">Mandat Virtual</div>
       <div class="row"><label>Montant du mandat (&euro;)</label><input type="number" id="eu-mandat" value="1990" step="100" oninput="cEU()"></div>
@@ -1089,6 +1093,35 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
     }).catch(function (e) {
       alert(e.message);
     });
+  };
+
+  // Case "Aucune homologation (0 €)" : remplace le détour habituel (choisir
+  // "Autre (saisie libre)" dans le menu déroulant puis taper "0" à la main)
+  // par un simple interrupteur. Verrouille le menu et le champ pendant que
+  // la case est cochée pour qu'ils ne puissent pas contredire le 0 affiché,
+  // et redéclenche le recalcul déjà exposé globalement par le script
+  // principal (cKR/cUS/cCA/cEU, déjà appelés via les attributs onchange
+  // existants dans le HTML -- jamais réimplémenté ici).
+  window.homZeroToggle = function (prefix) {
+    var cb = document.getElementById(prefix + "-hom-zero");
+    var input = document.getElementById(prefix + "-hom");
+    var preset = document.getElementById(prefix + "-hom-preset");
+    if (!cb || !input) return;
+    if (cb.checked) {
+      if (input.dataset.homPrev === undefined) input.dataset.homPrev = input.value;
+      input.value = "0";
+      input.disabled = true;
+      if (preset) preset.disabled = true;
+    } else {
+      input.disabled = false;
+      if (preset) preset.disabled = false;
+      if (input.dataset.homPrev !== undefined) {
+        input.value = input.dataset.homPrev;
+        delete input.dataset.homPrev;
+      }
+    }
+    var recalc = window["c" + prefix.toUpperCase()];
+    if (typeof recalc === "function") recalc();
   };
 
   function vhRenderSubmissions() {
