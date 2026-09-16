@@ -220,16 +220,27 @@ async function openBatchDetail(batchId) {
   }
 }
 
-async function openJobDetail(jobId) {
-  showPanel("job-detail");
+// Rafraîchissement "en direct" du détail d'un job : tant que le panneau est
+// affiché ET que le job n'a pas atteint un statut terminal, on ré-interroge
+// périodiquement /events pour voir apparaître les messages de l'extension au
+// fil du traitement réel sur le poste agence, sans que l'admin ait besoin de
+// recharger la page. Un seul timer actif à la fois (voir openJobDetail).
+let jobDetailPollTimer = null;
+const JOB_DETAIL_POLL_MS = 4000;
+
+function stopJobDetailPoll() {
+  if (jobDetailPollTimer) {
+    clearInterval(jobDetailPollTimer);
+    jobDetailPollTimer = null;
+  }
+}
+
+async function renderJobDetail(jobId, { showLoading }) {
   const listEl = document.getElementById("job-events-list");
   const statusEl2 = document.getElementById("job-detail-status");
   const urlEl = document.getElementById("job-detail-url");
   const vehicleEl = document.getElementById("job-detail-vehicle");
-  listEl.innerHTML = '<div class="empty">Chargement...</div>';
-  statusEl2.innerHTML = "";
-  urlEl.textContent = "";
-  vehicleEl.innerHTML = "";
+  if (showLoading) listEl.innerHTML = '<div class="empty">Chargement...</div>';
   try {
     const [{ vehicle_job }, { events }] = await Promise.all([
       apiFetch(`/api/admin/jobs/${jobId}`),
@@ -238,7 +249,14 @@ async function openJobDetail(jobId) {
     statusEl2.innerHTML = `<span class="badge ${escapeHtml(vehicle_job.status)}">${escapeHtml(vehicle_job.status)}</span>`;
     if (!TERMINAL_STATUSES.has(vehicle_job.status)) {
       statusEl2.innerHTML += ` <button class="danger" id="btn-cancel-job-detail" style="margin-left:8px;">Annuler</button>`;
-      document.getElementById("btn-cancel-job-detail").addEventListener("click", () => cancelJob(jobId, () => openJobDetail(jobId)));
+      document.getElementById("btn-cancel-job-detail").addEventListener("click", () => {
+        stopJobDetailPoll();
+        cancelJob(jobId, () => openJobDetail(jobId));
+      });
+    } else {
+      // Statut terminal (terminé/échoué/annulé) : plus rien de nouveau à
+      // attendre du poste agence, inutile de continuer à interroger le serveur.
+      stopJobDetailPoll();
     }
     urlEl.textContent = vehicle_job.source_url;
 
@@ -273,6 +291,25 @@ async function openJobDetail(jobId) {
   } catch (e) {
     listEl.innerHTML = `<div class="empty">Erreur : ${escapeHtml(e.message)}</div>`;
   }
+}
+
+async function openJobDetail(jobId) {
+  stopJobDetailPoll();
+  showPanel("job-detail");
+  document.getElementById("job-detail-status").innerHTML = "";
+  document.getElementById("job-detail-url").textContent = "";
+  document.getElementById("job-detail-vehicle").innerHTML = "";
+  await renderJobDetail(jobId, { showLoading: true });
+  jobDetailPollTimer = setInterval(() => {
+    // Le panneau a pu être quitté entre deux ticks (retour à la liste, autre
+    // onglet...) -- sans ce garde-fou le timer continuerait indéfiniment à
+    // interroger le serveur en arrière-plan pour un job qu'on ne regarde plus.
+    if (!document.getElementById("panel-job-detail").classList.contains("active")) {
+      stopJobDetailPoll();
+      return;
+    }
+    renderJobDetail(jobId, { showLoading: false });
+  }, JOB_DETAIL_POLL_MS);
 }
 
 // ---------- Formulaires ----------

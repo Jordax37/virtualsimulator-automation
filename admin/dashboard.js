@@ -1046,16 +1046,20 @@ async function openBatchDetail(batchId) {
     el.innerHTML = `<div class="empty">Erreur : ${escapeHtml(e.message)}</div>`;
   }
 }
-async function openJobDetail(jobId) {
-  showPanel("job-detail");
+var jobDetailPollTimer = null;
+var JOB_DETAIL_POLL_MS = 4e3;
+function stopJobDetailPoll() {
+  if (jobDetailPollTimer) {
+    clearInterval(jobDetailPollTimer);
+    jobDetailPollTimer = null;
+  }
+}
+async function renderJobDetail(jobId, { showLoading }) {
   const listEl = document.getElementById("job-events-list");
   const statusEl2 = document.getElementById("job-detail-status");
   const urlEl = document.getElementById("job-detail-url");
   const vehicleEl = document.getElementById("job-detail-vehicle");
-  listEl.innerHTML = '<div class="empty">Chargement...</div>';
-  statusEl2.innerHTML = "";
-  urlEl.textContent = "";
-  vehicleEl.innerHTML = "";
+  if (showLoading) listEl.innerHTML = '<div class="empty">Chargement...</div>';
   try {
     const [{ vehicle_job }, { events }] = await Promise.all([
       apiFetch(`/api/admin/jobs/${jobId}`),
@@ -1064,7 +1068,12 @@ async function openJobDetail(jobId) {
     statusEl2.innerHTML = `<span class="badge ${escapeHtml(vehicle_job.status)}">${escapeHtml(vehicle_job.status)}</span>`;
     if (!TERMINAL_STATUSES.has(vehicle_job.status)) {
       statusEl2.innerHTML += ` <button class="danger" id="btn-cancel-job-detail" style="margin-left:8px;">Annuler</button>`;
-      document.getElementById("btn-cancel-job-detail").addEventListener("click", () => cancelJob(jobId, () => openJobDetail(jobId)));
+      document.getElementById("btn-cancel-job-detail").addEventListener("click", () => {
+        stopJobDetailPoll();
+        cancelJob(jobId, () => openJobDetail(jobId));
+      });
+    } else {
+      stopJobDetailPoll();
     }
     urlEl.textContent = vehicle_job.source_url;
     const vd = vehicle_job.vehicle_data;
@@ -1093,6 +1102,21 @@ async function openJobDetail(jobId) {
   } catch (e) {
     listEl.innerHTML = `<div class="empty">Erreur : ${escapeHtml(e.message)}</div>`;
   }
+}
+async function openJobDetail(jobId) {
+  stopJobDetailPoll();
+  showPanel("job-detail");
+  document.getElementById("job-detail-status").innerHTML = "";
+  document.getElementById("job-detail-url").textContent = "";
+  document.getElementById("job-detail-vehicle").innerHTML = "";
+  await renderJobDetail(jobId, { showLoading: true });
+  jobDetailPollTimer = setInterval(() => {
+    if (!document.getElementById("panel-job-detail").classList.contains("active")) {
+      stopJobDetailPoll();
+      return;
+    }
+    renderJobDetail(jobId, { showLoading: false });
+  }, JOB_DETAIL_POLL_MS);
 }
 function setupForms() {
   document.getElementById("btn-create-batch").addEventListener("click", async () => {
